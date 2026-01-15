@@ -183,8 +183,8 @@ class rwb_massops extends CModule
         );
 
         CopyDirFiles(
-            $this->MODULE_FOLDER . '/install/admin',
-            Application::getDocumentRoot() . '/bitrix/admin',
+            $this->MODULE_FOLDER . '/install/public',
+            Application::getDocumentRoot(),
             true,
             true
         );
@@ -197,15 +197,8 @@ class rwb_massops extends CModule
      */
     public function unInstallFiles(): void
     {
-        DeleteDirFiles(
-            $this->MODULE_FOLDER . '/install/components',
-            Application::getDocumentRoot() . '/local/components'
-        );
-
-        DeleteDirFiles(
-            $this->MODULE_FOLDER . '/install/admin',
-            Application::getDocumentRoot() . '/bitrix/admin'
-        );
+        DeleteDirFilesEx('/local/components/rwb/massops.main');
+        DeleteDirFilesEx('massops');
     }
 
     /**

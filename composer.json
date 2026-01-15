@@ -1,0 +1,10 @@
+{
+  "name": "rwb/massops",
+  "description": "Mass operations module",
+  "type": "bitrix-module",
+  "autoload": {
+    "psr-4": {
+      "Rwb\\Massops\\": "lib/"
+    }
+  }
+}
