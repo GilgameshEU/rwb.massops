@@ -1,34 +1,38 @@
 BX.ready(function () {
 
-    const componentName = BX.message('RWB_MASSOPS_COMPONENT');
-    const signedParams = BX.message('RWB_MASSOPS_SIGNED_PARAMS');
-
-    const btn = BX('rwb-test-btn');
-    if (!btn) {
-        return;
-    }
+    const input = BX('rwb-import-file');
+    const btn = BX('rwb-import-btn');
+    const container = BX('rwb-grid-container');
 
     BX.bind(btn, 'click', function () {
 
+        if (!input.files.length) {
+            BX.UI.Notification.Center.notify({content: 'Выберите файл'});
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', input.files[0]);
+
         BX.ajax.runComponentAction(
-            componentName,
-            'test',
+            BX.message('RWB_COMPONENT'),
+            'uploadFile',
             {
                 mode: 'class',
-                signedParameters: signedParams,
-                data: {}
+                data: formData
             }
-        ).then(
-            function (response) {
-                BX.UI.Notification.Center.notify({
-                    content: 'Ответ сервера: ' + response.data.time
-                });
-            },
-            function (response) {
-                BX.UI.Notification.Center.notify({
-                    content: 'AJAX ошибка'
-                });
-            }
-        );
+        ).then(function (response) {
+
+            container.innerHTML = '';
+            BX.ajax.insertHTML(
+                container,
+                BX.create('div', {
+                    html: response.data.HTML || ''
+                })
+            );
+
+        }, function (error) {
+            BX.UI.Notification.Center.notify({content: 'Ошибка импорта'});
+        });
     });
 });

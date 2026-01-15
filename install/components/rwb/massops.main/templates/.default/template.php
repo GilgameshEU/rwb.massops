@@ -4,20 +4,18 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
     die();
 }
 
-\Bitrix\Main\UI\Extension::load('ui.notification');
+\Bitrix\Main\UI\Extension::load(['ui.grid', 'ui.notification']);
 ?>
 
-<div class="rwb-massops">
-    <h2>Массовые операции</h2>
-
-    <button id="rwb-test-btn" type="button">
-        AJAX test
-    </button>
+<div class="rwb-import">
+    <input type="file" id="rwb-import-file" accept=".csv,.xlsx">
+    <button id="rwb-import-btn">Загрузить</button>
 </div>
+
+<div id="rwb-grid-container"></div>
 
 <script>
     BX.message({
-        RWB_MASSOPS_COMPONENT: 'rwb:massops.main',
-        RWB_MASSOPS_SIGNED_PARAMS: '<?= CUtil::JSEscape($this->getComponent()->getSignedParameters()) ?>'
+        RWB_COMPONENT: 'rwb:massops.main'
     });
 </script>

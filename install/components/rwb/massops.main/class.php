@@ -4,108 +4,126 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
     die();
 }
 
-use Bitrix\Main\Context;
 use Bitrix\Main\Engine\Contract\Controllerable;
 use Bitrix\Main\Engine\CurrentUser;
-use Bitrix\Main\Error;
-use Bitrix\Main\ErrorCollection;
+use Bitrix\Main\Loader;
+use Rwb\Massops\Import\CompanyImportService;
 
 class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 {
-    protected ErrorCollection $errors;
-
-    public function __construct($component = null)
-    {
-        parent::__construct($component);
-        $this->errors = new ErrorCollection();
-    }
+    /**
+     * Сервис импорта (ленивая инициализация)
+     */
+    private ?CompanyImportService $importService = null;
 
     /**
-     * Обязательный метод для Controllerable
+     * Описываем AJAX-действия
      */
     public function configureActions(): array
     {
         return [
-            'test' => [
-                'prefilters' => [], // CSRF уже включён по умолчанию
-            ],
-            'massAction' => [
+            'uploadFile' => [
                 'prefilters' => [],
             ],
         ];
     }
 
     /**
-     * Обычный вывод компонента (не AJAX)
+     * Основной вывод компонента
      */
     public function executeComponent()
     {
-        if (!$this->checkAccess()) {
+        if (!CurrentUser::get()->isAdmin()) {
             ShowError('Доступ запрещён');
 
             return;
         }
 
-        $this->arResult = [
-            'USER_ID' => CurrentUser::get()->getId(),
-        ];
-
         $this->includeComponentTemplate();
     }
 
     /**
-     * 🔥 AJAX action
+     * AJAX: загрузка и парсинг CSV/XLSX
      */
-    public function testAction(): array
+    public function uploadFileAction(): array
     {
-        if (!$this->checkAccess()) {
-            $this->addError('ACCESS_DENIED', 'Нет прав доступа');
-
-            return [];
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new \Bitrix\Main\AccessDeniedException();
         }
 
-        return [
-            'status' => 'ok',
-            'time' => date('Y-m-d H:i:s'),
-        ];
+        $file = $_FILES['file'] ?? null;
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            throw new \RuntimeException('Файл не загружен');
+        }
+
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['csv', 'xlsx'], true)) {
+            throw new \RuntimeException('Поддерживаются только CSV и XLSX');
+        }
+
+        $rows = $this
+            ->getImportService()
+            ->parseFile($file['tmp_name'], $ext);
+
+        return $this->buildGrid($rows);
     }
 
     /**
-     * Пример массового действия
+     * Ленивая загрузка сервиса импорта
      */
-    public function massAction(array $ids, string $entity): array
+    protected function getImportService(): CompanyImportService
     {
-        if (!$this->checkAccess()) {
-            $this->addError('ACCESS_DENIED', 'Нет прав доступа');
+        if ($this->importService === null) {
+            if (!Loader::includeModule('rwb.massops')) {
+                throw new \RuntimeException('Module rwb.massops not loaded');
+            }
 
-            return [];
+            $this->importService = new CompanyImportService();
         }
 
-        if (empty($ids)) {
-            $this->addError('EMPTY_IDS', 'Не переданы ID');
+        return $this->importService;
+    }
 
-            return [];
+    /**
+     * Подготовка данных для Bitrix UI Grid
+     */
+    protected function buildGrid(array $rows): array
+    {
+        if (empty($rows)) {
+            throw new \RuntimeException('Файл пустой');
         }
 
-        // здесь логика массовых операций
+        $headers = array_shift($rows);
+
+        $columns = [];
+        foreach ($headers as $key => $title) {
+            $columns[] = [
+                'id' => 'COL_' . $key,
+                'name' => (string) $title,
+                'sort' => 'COL_' . $key,
+            ];
+        }
+
+        $gridRows = [];
+        foreach ($rows as $i => $row) {
+            $data = [];
+            foreach ($row as $k => $value) {
+                $data['COL_' . $k] = $value;
+            }
+
+            $gridRows[] = [
+                'id' => $i,
+                'data' => $data,
+            ];
+        }
+
         return [
-            'entity' => $entity,
-            'count' => count($ids),
+            'GRID_ID' => 'RWB_CRM_COMPANY_IMPORT',
+            'COLUMNS' => $columns,
+            'ROWS' => $gridRows,
+            'SHOW_ROW_CHECKBOXES' => true,
+            'SHOW_TOTAL_COUNTER' => true,
+            'TOTAL_ROWS_COUNT' => count($gridRows),
         ];
-    }
-
-    protected function checkAccess(): bool
-    {
-        return CurrentUser::get()->isAdmin();
-    }
-
-    protected function addError(string $code, string $message): void
-    {
-        $this->errors->setError(new Error($message, $code));
-    }
-
-    public function getErrors(): array
-    {
-        return $this->errors->toArray();
     }
 }

@@ -2,6 +2,9 @@
   "name": "rwb/massops",
   "description": "Mass operations module",
   "type": "bitrix-module",
+  "require": {
+    "phpoffice/phpspreadsheet": "^1.29"
+  },
   "autoload": {
     "psr-4": {
       "Rwb\\Massops\\": "lib/"
