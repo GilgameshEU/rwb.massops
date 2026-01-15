@@ -1,21 +1,20 @@
 BX.ready(function () {
 
-    const input = BX('rwb-import-file');
-    const btn = BX('rwb-import-btn');
-    const container = BX('rwb-grid-container');
+    const uploadBtn = BX('rwb-import-upload');
+    const fileInput = BX('rwb-import-file');
 
-    BX.bind(btn, 'click', function () {
+    uploadBtn.addEventListener('click', function () {
 
-        if (!input.files.length) {
-            BX.UI.Notification.Center.notify({content: 'Выберите файл'});
+        if (!fileInput.files.length) {
+            alert('Выберите файл');
             return;
         }
 
         const formData = new FormData();
-        formData.append('file', input.files[0]);
+        formData.append('file', fileInput.files[0]);
 
         BX.ajax.runComponentAction(
-            BX.message('RWB_COMPONENT'),
+            'rwb:massops.main',
             'uploadFile',
             {
                 mode: 'class',
@@ -23,16 +22,22 @@ BX.ready(function () {
             }
         ).then(function (response) {
 
-            container.innerHTML = '';
-            BX.ajax.insertHTML(
-                container,
-                BX.create('div', {
-                    html: response.data.HTML || ''
-                })
+            console.log('AJAX response:', response.data);
+
+            alert(
+                'Файл успешно разобран. Строк: ' + response.data.total
             );
 
-        }, function (error) {
-            BX.UI.Notification.Center.notify({content: 'Ошибка импорта'});
+        }).catch(function (error) {
+
+            console.error(error);
+
+            if (error.errors && error.errors.length) {
+                alert(error.errors[0].message);
+            } else {
+                alert('Ошибка при загрузке файла');
+            }
         });
     });
+
 });

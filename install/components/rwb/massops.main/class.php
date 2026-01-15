@@ -65,7 +65,14 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             ->getImportService()
             ->parseFile($file['tmp_name'], $ext);
 
-        return $this->buildGrid($rows);
+        if (empty($rows)) {
+            throw new \RuntimeException('Файл пустой');
+        }
+
+        return [
+            'rows' => $rows,
+            'total' => count($rows),
+        ];
     }
 
     /**
@@ -84,46 +91,8 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         return $this->importService;
     }
 
-    /**
-     * Подготовка данных для Bitrix UI Grid
-     */
-    protected function buildGrid(array $rows): array
+    protected function renderGrid(array $rows): string
     {
-        if (empty($rows)) {
-            throw new \RuntimeException('Файл пустой');
-        }
-
-        $headers = array_shift($rows);
-
-        $columns = [];
-        foreach ($headers as $key => $title) {
-            $columns[] = [
-                'id' => 'COL_' . $key,
-                'name' => (string) $title,
-                'sort' => 'COL_' . $key,
-            ];
-        }
-
-        $gridRows = [];
-        foreach ($rows as $i => $row) {
-            $data = [];
-            foreach ($row as $k => $value) {
-                $data['COL_' . $k] = $value;
-            }
-
-            $gridRows[] = [
-                'id' => $i,
-                'data' => $data,
-            ];
-        }
-
-        return [
-            'GRID_ID' => 'RWB_CRM_COMPANY_IMPORT',
-            'COLUMNS' => $columns,
-            'ROWS' => $gridRows,
-            'SHOW_ROW_CHECKBOXES' => true,
-            'SHOW_TOTAL_COUNTER' => true,
-            'TOTAL_ROWS_COUNT' => count($gridRows),
-        ];
+        return '';
     }
 }
