@@ -39,6 +39,17 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             return;
         }
 
+        // Получаем данные из сессии или ставим дефолтные пустые
+        $saved = $_SESSION['RWB_MASSOPS_RESULT'] ?? [];
+        $this->arResult['GRID_COLUMNS'] = $saved['COLUMNS'] ?? [
+            [
+                'id' => 'EMPTY',
+                'name' => 'Файл не загружен',
+                'default' => true,
+            ],
+        ];
+        $this->arResult['GRID_ROWS'] = $saved['ROWS'] ?? [];
+
         $this->includeComponentTemplate();
     }
 
@@ -69,10 +80,50 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             throw new \RuntimeException('Файл пустой');
         }
 
-        return [
-            'rows' => $rows,
-            'total' => count($rows),
+        // 1. Извлекаем заголовки (первая строка)
+        $headerRow = array_shift($rows);
+        $columns = [];
+        foreach ($headerRow as $index => $name) {
+            $columns[] = [
+                'id' => 'COL_' . $index,
+                'name' => (string) $name,
+                'default' => true,
+            ];
+        }
+
+        // 2. Формируем данные строк
+        $gridRows = [];
+        foreach ($rows as $rowIndex => $row) {
+            $data = [];
+            foreach ($row as $cellIndex => $cellValue) {
+                // Если значение массив (бывает в XLSX), берем первый элемент или пустую строку
+                $data['COL_' . $cellIndex] = is_array($cellValue) ? implode(', ', $cellValue) : (string) $cellValue;
+            }
+
+            $gridRows[] = [
+                'id' => 'row_' . $rowIndex,
+                'data' => $data,
+            ];
+        }
+
+        // Сохраняем всё в сессию
+        $_SESSION['RWB_MASSOPS_RESULT'] = [
+            'COLUMNS' => $columns,
+            'ROWS' => $gridRows,
         ];
+
+        return ['total' => count($gridRows)];
+    }
+
+    public function clearAction(): array
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new \Bitrix\Main\AccessDeniedException();
+        }
+
+        unset($_SESSION['RWB_MASSOPS_RESULT']);
+
+        return ['status' => 'success'];
     }
 
     /**
@@ -89,10 +140,5 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         }
 
         return $this->importService;
-    }
-
-    protected function renderGrid(array $rows): string
-    {
-        return '';
     }
 }

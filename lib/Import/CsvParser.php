@@ -7,16 +7,41 @@ class CsvParser implements ParserInterface
     public function parse(string $path): array
     {
         $rows = [];
-
-        if (($handle = fopen($path, 'r')) === false) {
-            throw new \RuntimeException('Cannot open CSV');
+        $content = file_get_contents($path);
+        if ($content === false) {
+            throw new \RuntimeException('Cannot read CSV file');
         }
 
-        while (($row = fgetcsv($handle, 0, ';')) !== false) {
-            $rows[] = $row;
-        }
+        // Убираем BOM и нормализуем концы строк
+        $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);
+        $lines = explode("\n", str_replace(["\r\n", "\r"], "\n", $content));
 
-        fclose($handle);
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+
+            // Если вся строка в кавычках типа "A;B;C", убираем их перед парсингом
+            if (str_starts_with($line, '"') && str_ends_with($line, '"')) {
+                $line = mb_substr($line, 1, -1);
+            }
+
+            // Пробуем точку с запятой, если её нет — запятую
+            $separator = (str_contains($line, ';')) ? ';' : ',';
+
+            // Используем str_getcsv для корректной обработки полей
+            $row = str_getcsv($line, $separator);
+
+            // Финальная очистка каждого поля
+            $row = array_map(function ($item) {
+                return trim($item, " \t\n\r\0\x0B\"");
+            }, $row);
+
+            if (!empty($row)) {
+                $rows[] = $row;
+            }
+        }
 
         return $rows;
     }
