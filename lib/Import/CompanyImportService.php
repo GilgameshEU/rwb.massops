@@ -2,13 +2,16 @@
 
 namespace Rwb\Massops\Import;
 
+use Rwb\Massops\Import\Parser\Csv;
+use Rwb\Massops\Import\Parser\Xlsx;
+
 class CompanyImportService
 {
     public function parseFile(string $path, string $ext): array
     {
         $parser = match ($ext) {
-            'csv' => new CsvParser(),
-            'xlsx' => new XlsxParser(),
+            'csv' => new Csv(),
+            'xlsx' => new Xlsx(),
             default => throw new \InvalidArgumentException('Unsupported format'),
         };
 

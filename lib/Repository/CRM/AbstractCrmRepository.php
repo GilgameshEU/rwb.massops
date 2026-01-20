@@ -2,12 +2,15 @@
 
 namespace Rwb\Massops\Repository\CRM;
 
+use Bitrix\Crm\Item;
+use Bitrix\Crm\Multifield\Assembler;
 use Bitrix\Crm\Service\Container;
 use Bitrix\Crm\Service\Factory;
+use Bitrix\Main\ArgumentException;
 use Bitrix\Main\Loader;
 use Bitrix\Main\Result;
 use CCrmFieldInfoAttr;
-use CCrmFieldMulti;
+use RuntimeException;
 
 abstract class AbstractCrmRepository
 {
@@ -26,49 +29,40 @@ abstract class AbstractCrmRepository
 
         $factory = Container::getInstance()->getFactory($this->getType());
         if (!$factory) {
-            throw new \RuntimeException(
-                'Factory not found for CRM type ' . $this->getType()
+            throw new RuntimeException(
+                'CRM Factory not found for type ' . $this->getType()
             );
         }
 
         return $factory;
     }
 
+    /**
+     * Получение списка доступных полей (для шаблона / маппинга)
+     */
     public function getFieldList(): array
     {
         $result = [];
-
         $fields = $this->getFactory()->getFieldsCollection();
 
-        //        foreach ($fields as $field) {
-        //            echo '<pre>';
-        //            echo $field->getName() . PHP_EOL;
-        //            echo $field->getTitle() . PHP_EOL;
-        //            echo $field->getType() . PHP_EOL;
-        //            print_r($field->getAttributes());
-        //            echo '</pre>';
-        //        }
-
         foreach ($fields as $field) {
-            if ($field->getName() === 'FM') {
-                $result['PHONE'] = 'Телефон';
-                $result['EMAIL'] = 'E-mail';
+            if ($this->isFieldExcluded($field)) {
                 continue;
             }
 
-            if ($this->isFieldExcluded($field)) {
+            if ($field->getName() === Item::FIELD_NAME_FM) {
+                $result['PHONE'] = 'Телефон';
+                $result['EMAIL'] = 'E-mail';
                 continue;
             }
 
             $result[$field->getName()] = $field->getTitle();
         }
 
-        //        var_dump($result);
-
         return $result;
     }
 
-    public function isFieldExcluded($field): bool
+    protected function isFieldExcluded($field): bool
     {
         $attributes = $field->getAttributes();
 
@@ -88,48 +82,42 @@ abstract class AbstractCrmRepository
         return false;
     }
 
-    public function add(array $fields, array $fm = []): Result
-    {
+    /**
+     *
+     * @throws ArgumentException
+     */
+    public function add(
+        array $fields,
+        array $uf = [],
+        array $fm = [],
+        ?callable $settings = null
+    ): Result {
         $factory = $this->getFactory();
+
         $item = $factory->createItem($fields);
+
+        foreach ($uf as $field => $value) {
+            $item->set($field, $value);
+        }
+
+        if (!empty($fm)) {
+            $fmCollection = $item->get(Item::FIELD_NAME_FM);
+            Assembler::updateCollectionByArray($fmCollection, $fm);
+            $item->set(Item::FIELD_NAME_FM, $fmCollection);
+        }
 
         $operation = $factory->getAddOperation($item);
         $operation->disableCheckAccess();
 
-        $result = $operation->launch();
-        if (!$result->isSuccess()) {
-            return $result;
+        if ($settings) {
+            $settings($operation);
         }
 
-        if (!empty($fm)) {
-            $this->saveMultifields(
-                $this->getName(),
-                $item->getId(),
-                $fm
-            );
-        }
-
-        return $result;
+        return $operation->launch();
     }
 
-    protected function saveMultifields(string $entityName, int $entityId, array $fm): void
+    public function getFieldsInfo(): array
     {
-        $fmData = [];
-
-        foreach (['PHONE', 'EMAIL'] as $type) {
-            if (empty($fm[$type]) || !is_array($fm[$type])) {
-                continue;
-            }
-
-            $fmData[$type][] = [
-                'VALUE' => $fm[$type],
-                'VALUE_TYPE' => 'WORK',
-            ];
-        }
-
-        if ($fmData) {
-            $multi = new CCrmFieldMulti();
-            $multi->setFields($entityName, $entityId, $fmData);
-        }
+        return $this->getFactory()->getFieldsInfo();
     }
 }
