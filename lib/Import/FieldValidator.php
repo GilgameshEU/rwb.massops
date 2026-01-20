@@ -2,12 +2,16 @@
 
 namespace Rwb\Massops\Import;
 
+use Bitrix\Main\LoaderException;
 use RuntimeException;
-use Rwb\Massops\Repository\CRM\AbstractCrmRepository;
+use Rwb\Massops\Repository\CRM\ARepository;
 
 class FieldValidator
 {
-    public function validate(array $rows, AbstractCrmRepository $repository): void
+    /**
+     * @throws LoaderException
+     */
+    public function validate(array $rows, ARepository $repository): void
     {
         $this->assertRowsNotEmpty($rows);
         $header = $this->extractHeader($rows);
@@ -15,6 +19,11 @@ class FieldValidator
         $this->assertFieldsExist($header, $repository);
     }
 
+    /**
+     * @param array $rows
+     *
+     * @return void
+     */
     private function assertRowsNotEmpty(array $rows): void
     {
         if (empty($rows)) {
@@ -26,11 +35,21 @@ class FieldValidator
         }
     }
 
+    /**
+     * @param array $rows
+     *
+     * @return array
+     */
     private function extractHeader(array $rows): array
     {
         return array_map('trim', (array) $rows[0]);
     }
 
+    /**
+     * @param array $header
+     *
+     * @return void
+     */
     private function assertHeaderNotEmpty(array $header): void
     {
         if (empty(array_filter($header))) {
@@ -38,9 +57,12 @@ class FieldValidator
         }
     }
 
+    /**
+     * @throws LoaderException
+     */
     private function assertFieldsExist(
         array $header,
-        AbstractCrmRepository $repository
+        ARepository $repository
     ): void {
         $crmTitles = array_values($repository->getFieldList());
 

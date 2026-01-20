@@ -8,21 +8,28 @@ use Bitrix\Crm\Service\Container;
 use Bitrix\Crm\Service\Factory;
 use Bitrix\Main\ArgumentException;
 use Bitrix\Main\Loader;
+use Bitrix\Main\LoaderException;
 use Bitrix\Main\Result;
 use CCrmFieldInfoAttr;
 use RuntimeException;
 
-abstract class AbstractCrmRepository
+abstract class ARepository
 {
     abstract public function getType(): int;
 
     abstract public function getName(): string;
 
+    /**
+     * @throws LoaderException
+     */
     protected function initContext(): void
     {
         Loader::requireModule('crm');
     }
 
+    /**
+     * @throws LoaderException
+     */
     public function getFactory(): Factory
     {
         $this->initContext();
@@ -39,6 +46,8 @@ abstract class AbstractCrmRepository
 
     /**
      * Получение списка доступных полей (для шаблона / маппинга)
+     *
+     * @throws LoaderException
      */
     public function getFieldList(): array
     {
@@ -84,7 +93,7 @@ abstract class AbstractCrmRepository
 
     /**
      *
-     * @throws ArgumentException
+     * @throws ArgumentException|LoaderException
      */
     public function add(
         array $fields,
@@ -116,6 +125,9 @@ abstract class AbstractCrmRepository
         return $operation->launch();
     }
 
+    /**
+     * @throws LoaderException
+     */
     public function getFieldsInfo(): array
     {
         return $this->getFactory()->getFieldsInfo();

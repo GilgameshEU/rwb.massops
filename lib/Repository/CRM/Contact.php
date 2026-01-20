@@ -4,15 +4,15 @@ namespace Rwb\Massops\Repository\CRM;
 
 use CCrmOwnerType;
 
-class CompanyRepository extends AbstractCrmRepository
+class Contact extends ARepository
 {
     public function getType(): int
     {
-        return CCrmOwnerType::Company;
+        return CCrmOwnerType::Contact;
     }
 
     public function getName(): string
     {
-        return CCrmOwnerType::CompanyName;
+        return CCrmOwnerType::ContactName;
     }
 }
