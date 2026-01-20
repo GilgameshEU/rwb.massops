@@ -8,6 +8,7 @@ use Bitrix\Main\AccessDeniedException;
 use Bitrix\Main\Engine\Contract\Controllerable;
 use Bitrix\Main\Engine\CurrentUser;
 use Bitrix\Main\Loader;
+use Rwb\Massops\Import\FieldValidator;
 use Rwb\Massops\Import\Service\CompanyImport;
 use Rwb\Massops\Repository\CRM\Company;
 
@@ -79,6 +80,9 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             $ext
         );
 
+        $validator = new FieldValidator();
+        $validator->validate($rows, $this->companyRepository);
+
         $headerRow = array_shift($rows);
         $columns = [];
 
@@ -140,5 +144,20 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         unset($_SESSION['RWB_MASSOPS_RESULT']);
 
         return ['status' => 'success'];
+    }
+
+    public function downloadTemplateAction(): void
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new \Bitrix\Main\AccessDeniedException();
+        }
+        $fields = $this->companyRepository->getFieldList();
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="company_import_template.csv"');
+        $output = fopen('php://output', 'w');
+        fwrite($output, "\xEF\xBB\xBF");
+        fputcsv($output, array_values($fields), ';');
+        fclose($output);
+        die();
     }
 }
