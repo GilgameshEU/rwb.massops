@@ -2,6 +2,7 @@
 
 namespace Rwb\Massops\Import\Service;
 
+use Rwb\Massops\Import\ImportError;
 use Rwb\Massops\Import\ValidationResult;
 use Rwb\Massops\Repository\CRM\Company;
 use Rwb\Massops\Import\RowNormalizer;
@@ -24,9 +25,12 @@ class CompanyImport extends AImport
         $result = new ValidationResult();
 
         if (empty($fields['TITLE'])) {
-            $result->addError(
-                'Не заполнено обязательное поле: Название компании'
-            );
+            $result->addError(new ImportError(
+                type: 'field',
+                code: 'REQUIRED',
+                message: 'Не заполнено обязательное поле: Название компании',
+                field: 'TITLE'
+            ));
         }
 
         return $result;

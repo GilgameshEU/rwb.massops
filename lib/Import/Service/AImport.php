@@ -7,6 +7,7 @@ use Bitrix\Main\ArgumentException;
 use Bitrix\Main\LoaderException;
 use RuntimeException;
 use Rwb\Massops\Import\FieldValidator;
+use Rwb\Massops\Import\ImportError;
 use Rwb\Massops\Import\Parser\Csv;
 use Rwb\Massops\Import\Parser\Xlsx;
 use Rwb\Massops\Import\RowNormalizer;
@@ -49,7 +50,22 @@ abstract class AImport
             $validation = $this->validateRow($fields, $uf, $fm);
 
             if (!$validation->isValid()) {
-                $errors[$rowIndex] = $validation->getErrors();
+                $rowErrors = $validation->getErrors();
+                // Устанавливаем номер строки для всех ошибок валидации
+                foreach ($rowErrors as $error) {
+                    if ($error->row === null) {
+                        $errors[$rowIndex][] = new ImportError(
+                            type: $error->type,
+                            code: $error->code,
+                            message: $error->message,
+                            row: $rowIndex + 1, // +1 потому что обычно строки считаются с 1
+                            field: $error->field,
+                            context: $error->context
+                        );
+                    } else {
+                        $errors[$rowIndex][] = $error;
+                    }
+                }
                 continue;
             }
 
@@ -62,7 +78,17 @@ abstract class AImport
             if ($result->isSuccess()) {
                 $success++;
             } else {
-                $errors[$rowIndex] = $result->getErrorMessages();
+                // Конвертируем ошибки Bitrix Result в ImportError
+                $rowErrors = [];
+                foreach ($result->getErrorMessages() as $message) {
+                    $rowErrors[] = new ImportError(
+                        type: 'system',
+                        code: 'INVALID',
+                        message: $message,
+                        row: $rowIndex + 1
+                    );
+                }
+                $errors[$rowIndex] = $rowErrors;
             }
         }
 
@@ -74,18 +100,60 @@ abstract class AImport
 
     /**
      * Парсинг файла
+     *
+     * @return array{data: array, errors: ImportError[]}
      */
     public function parseFile(string $path, string $ext): array
     {
-        $parser = match ($ext) {
-            'csv' => new Csv(),
-            'xlsx' => new Xlsx(),
-            default => throw new \InvalidArgumentException('Unsupported format'),
-        };
+        $errors = [];
 
-        return $this->normalizeUtf8(
-            $parser->parse($path)
-        );
+        try {
+            $parser = match ($ext) {
+                'csv' => new Csv(),
+                'xlsx' => new Xlsx(),
+                default => throw new \InvalidArgumentException('Unsupported format'),
+            };
+
+            $data = $this->normalizeUtf8(
+                $parser->parse($path)
+            );
+
+            return [
+                'data' => $data,
+                'errors' => $errors,
+            ];
+        } catch (\RuntimeException $e) {
+            $errors[] = new ImportError(
+                type: 'file',
+                code: 'FILE_INVALID',
+                message: $e->getMessage()
+            );
+            return [
+                'data' => [],
+                'errors' => $errors,
+            ];
+        } catch (\InvalidArgumentException $e) {
+            $errors[] = new ImportError(
+                type: 'file',
+                code: 'FILE_INVALID',
+                message: $e->getMessage()
+            );
+            return [
+                'data' => [],
+                'errors' => $errors,
+            ];
+        } catch (\Exception $e) {
+            // Обрабатываем любые другие исключения от парсеров (например, PhpOffice)
+            $errors[] = new ImportError(
+                type: 'file',
+                code: 'FILE_INVALID',
+                message: 'Ошибка при чтении файла: ' . $e->getMessage()
+            );
+            return [
+                'data' => [],
+                'errors' => $errors,
+            ];
+        }
     }
 
     private function normalizeUtf8(array $data): array

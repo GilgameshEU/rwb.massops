@@ -4,11 +4,23 @@ namespace Rwb\Massops\Import;
 
 class ValidationResult
 {
+    /** @var ImportError[] */
     private array $errors = [];
 
-    public function addError(string $message): void
+    public function addError(ImportError $error): void
     {
-        $this->errors[] = $message;
+        $this->errors[] = $error;
+    }
+
+    public function addErrorString(string $message, ?string $field = null, ?int $row = null): void
+    {
+        $this->errors[] = new ImportError(
+            type: 'field',
+            code: 'INVALID',
+            message: $message,
+            row: $row,
+            field: $field
+        );
     }
 
     public function isValid(): bool
@@ -16,6 +28,9 @@ class ValidationResult
         return empty($this->errors);
     }
 
+    /**
+     * @return ImportError[]
+     */
     public function getErrors(): array
     {
         return $this->errors;

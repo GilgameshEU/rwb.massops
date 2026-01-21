@@ -75,13 +75,39 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         }
 
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        $rows = $this->importService->parseFile(
+        $parseResult = $this->importService->parseFile(
             $file['tmp_name'],
             $ext
         );
 
+        // Проверяем ошибки парсинга
+        if (!empty($parseResult['errors'])) {
+            $errorMessages = array_map(
+                fn($error) => $error->toArray(),
+                $parseResult['errors']
+            );
+            return [
+                'success' => false,
+                'errors' => $errorMessages,
+            ];
+        }
+
+        $rows = $parseResult['data'];
+
         $validator = new FieldValidator();
-        $validator->validate($rows, $this->companyRepository);
+        $validationErrors = $validator->validate($rows, $this->companyRepository);
+
+        // Проверяем ошибки валидации
+        if (!empty($validationErrors)) {
+            $errorMessages = array_map(
+                fn($error) => $error->toArray(),
+                $validationErrors
+            );
+            return [
+                'success' => false,
+                'errors' => $errorMessages,
+            ];
+        }
 
         $headerRow = array_shift($rows);
         $columns = [];
@@ -132,10 +158,19 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             $saved['ROWS']
         );
 
+        // Конвертируем ошибки в формат для грида
+        $gridErrors = [];
+        foreach ($result['errors'] as $rowIndex => $rowErrors) {
+            $gridErrors[$rowIndex] = array_map(
+                fn($error) => $error->toArray(),
+                $rowErrors
+            );
+        }
+
         return [
             'success' => true,
             'added' => $result['success'],
-            'errors' => $result['errors'],
+            'errors' => $gridErrors,
         ];
     }
 

@@ -3,36 +3,54 @@
 namespace Rwb\Massops\Import;
 
 use Bitrix\Main\LoaderException;
-use RuntimeException;
 use Rwb\Massops\Repository\CRM\ARepository;
 
 class FieldValidator
 {
     /**
+     * @return ImportError[]
      * @throws LoaderException
      */
-    public function validate(array $rows, ARepository $repository): void
+    public function validate(array $rows, ARepository $repository): array
     {
-        $this->assertRowsNotEmpty($rows);
+        $errors = [];
+
+        $errors = array_merge($errors, $this->assertRowsNotEmpty($rows));
         $header = $this->extractHeader($rows);
-        $this->assertHeaderNotEmpty($header);
-        $this->assertFieldsExist($header, $repository);
+        $errors = array_merge($errors, $this->assertHeaderNotEmpty($header));
+        $errors = array_merge($errors, $this->assertFieldsExist($header, $repository));
+
+        return $errors;
     }
 
     /**
      * @param array $rows
      *
-     * @return void
+     * @return ImportError[]
      */
-    private function assertRowsNotEmpty(array $rows): void
+    private function assertRowsNotEmpty(array $rows): array
     {
+        $errors = [];
+
         if (empty($rows)) {
-            throw new RuntimeException('Файл пустой');
+            $errors[] = new ImportError(
+                type: 'file',
+                code: 'FILE_INVALID',
+                message: 'Файл пустой'
+            );
+
+            return $errors;
         }
 
         if (count($rows) < 2) {
-            throw new RuntimeException('Файл содержит только шаблон без данных');
+            $errors[] = new ImportError(
+                type: 'file',
+                code: 'FILE_INVALID',
+                message: 'Файл содержит только шаблон без данных'
+            );
         }
+
+        return $errors;
     }
 
     /**
@@ -48,22 +66,32 @@ class FieldValidator
     /**
      * @param array $header
      *
-     * @return void
+     * @return ImportError[]
      */
-    private function assertHeaderNotEmpty(array $header): void
+    private function assertHeaderNotEmpty(array $header): array
     {
+        $errors = [];
+
         if (empty(array_filter($header))) {
-            throw new RuntimeException('Шаблон не содержит ни одного поля');
+            $errors[] = new ImportError(
+                type: 'header',
+                code: 'INVALID',
+                message: 'Шаблон не содержит ни одного поля'
+            );
         }
+
+        return $errors;
     }
 
     /**
+     * @return ImportError[]
      * @throws LoaderException
      */
     private function assertFieldsExist(
         array $header,
         ARepository $repository
-    ): void {
+    ): array {
+        $errors = [];
         $crmTitles = array_values($repository->getFieldList());
 
         $missing = [];
@@ -79,9 +107,14 @@ class FieldValidator
         }
 
         if (!empty($missing)) {
-            throw new RuntimeException(
-                'В CRM не найдены поля: ' . implode(', ', $missing)
+            $errors[] = new ImportError(
+                type: 'header',
+                code: 'NOT_FOUND',
+                message: 'В CRM не найдены поля: ' . implode(', ', $missing),
+                context: ['missing_fields' => $missing]
             );
         }
+
+        return $errors;
     }
 }
