@@ -5,6 +5,12 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
 }
 
 \Bitrix\Main\UI\Extension::load("ui.buttons");
+
+Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'errorHandler.js');
+Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'uploadHandler.js');
+Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'importHandler.js');
+Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'templateHandler.js');
+Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'main.js');
 ?>
 
 <div style="margin-bottom: 20px;">

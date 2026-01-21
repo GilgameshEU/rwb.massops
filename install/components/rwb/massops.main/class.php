@@ -8,6 +8,8 @@ use Bitrix\Main\AccessDeniedException;
 use Bitrix\Main\Engine\Contract\Controllerable;
 use Bitrix\Main\Engine\CurrentUser;
 use Bitrix\Main\Loader;
+use Rwb\Massops\Component\Helper\GridDataConverter;
+use Rwb\Massops\Component\Helper\SessionStorage;
 use Rwb\Massops\Import\FieldValidator;
 use Rwb\Massops\Import\Service\CompanyImport;
 use Rwb\Massops\Repository\CRM\Company;
@@ -52,13 +54,8 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $this->arResult['COMPANY_FIELDS'] =
             $this->companyRepository->getFieldList();
 
-        $saved = $_SESSION['RWB_MASSOPS_RESULT'] ?? [];
-
-        $this->arResult['GRID_COLUMNS'] =
-            $saved['COLUMNS'] ?? [];
-
-        $this->arResult['GRID_ROWS'] =
-            $saved['ROWS'] ?? [];
+        $this->arResult['GRID_COLUMNS'] = SessionStorage::getColumns();
+        $this->arResult['GRID_ROWS'] = SessionStorage::getRows();
 
         $this->includeComponentTemplate();
     }
@@ -110,37 +107,11 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         }
 
         $headerRow = array_shift($rows);
-        $columns = [];
+        $gridData = GridDataConverter::convertToGridFormat($rows, $headerRow);
 
-        foreach ($headerRow as $i => $name) {
-            $columns[] = [
-                'id' => 'COL_' . $i,
-                'name' => (string) $name,
-                'default' => true,
-            ];
-        }
+        SessionStorage::save($gridData['columns'], $gridData['rows']);
 
-        $gridRows = [];
-
-        foreach ($rows as $rowIndex => $row) {
-            $data = [];
-
-            foreach ($row as $cellIndex => $value) {
-                $data['COL_' . $cellIndex] = (string) $value;
-            }
-
-            $gridRows[] = [
-                'id' => 'row_' . $rowIndex,
-                'data' => $data,
-            ];
-        }
-
-        $_SESSION['RWB_MASSOPS_RESULT'] = [
-            'COLUMNS' => $columns,
-            'ROWS' => $gridRows,
-        ];
-
-        return ['total' => count($gridRows)];
+        return ['total' => count($gridData['rows'])];
     }
 
     public function importCompaniesAction(): array
@@ -149,13 +120,12 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             throw new AccessDeniedException();
         }
 
-        $saved = $_SESSION['RWB_MASSOPS_RESULT'] ?? null;
-        if (!$saved || empty($saved['ROWS'])) {
+        if (!SessionStorage::hasData()) {
             throw new \RuntimeException('Нет данных для импорта');
         }
 
         $result = $this->importService->import(
-            $saved['ROWS']
+            SessionStorage::getRows()
         );
 
         // Конвертируем ошибки в формат для грида
@@ -176,7 +146,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
     public function clearAction(): array
     {
-        unset($_SESSION['RWB_MASSOPS_RESULT']);
+        SessionStorage::clear();
 
         return ['status' => 'success'];
     }
