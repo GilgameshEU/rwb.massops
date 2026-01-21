@@ -2,17 +2,32 @@
 
 namespace Rwb\Massops\Import;
 
+/**
+ * Нормализует строку импорта в структуры CRM
+ */
 class RowNormalizer
 {
     private Config $config;
 
+    /**
+     * @param Config|null $config Конфигурация импорта
+     */
     public function __construct(?Config $config = null)
     {
         $this->config = $config ?? new Config();
     }
 
     /**
-     * @return array [$fields, $uf, $fm]
+     * Нормализует строку данных
+     *
+     * @param array $row        Данные строки
+     * @param array $fieldCodes Коды полей CRM
+     *
+     * @return array{
+     *     0: array, // поля
+     *     1: array, // пользовательские поля
+     *     2: array  // мультиполя
+     * }
      */
     public function normalize(array $row, array $fieldCodes): array
     {
@@ -51,6 +66,14 @@ class RowNormalizer
         return [$fields, $uf, $fm];
     }
 
+    /**
+     * Нормализует значение мультиполя
+     *
+     * @param string $value
+     * @param string $delimiter
+     *
+     * @return array
+     */
     private function normalizeMultiField(
         string $value,
         string $delimiter

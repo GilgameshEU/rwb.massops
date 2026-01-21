@@ -8,6 +8,11 @@ use Rwb\Massops\Repository\CRM\ARepository;
 class FieldValidator
 {
     /**
+     * Валидирует поля импортируемых данных
+     *
+     * @param array $rows             Массив строк данных для импорта
+     * @param ARepository $repository Репозиторий для проверки существования полей
+     *
      * @return ImportError[]
      * @throws LoaderException
      */
@@ -18,13 +23,14 @@ class FieldValidator
         $errors = array_merge($errors, $this->assertRowsNotEmpty($rows));
         $header = $this->extractHeader($rows);
         $errors = array_merge($errors, $this->assertHeaderNotEmpty($header));
-        $errors = array_merge($errors, $this->assertFieldsExist($header, $repository));
 
-        return $errors;
+        return array_merge($errors, $this->assertFieldsExist($header, $repository));
     }
 
     /**
-     * @param array $rows
+     * Проверяет, что массив строк не пустой
+     *
+     * @param array $rows Массив строк
      *
      * @return ImportError[]
      */
@@ -54,9 +60,11 @@ class FieldValidator
     }
 
     /**
-     * @param array $rows
+     * Извлекает заголовок из первой строки данных
      *
-     * @return array
+     * @param array $rows Массив строк
+     *
+     * @return array Массив заголовков
      */
     private function extractHeader(array $rows): array
     {
@@ -64,7 +72,9 @@ class FieldValidator
     }
 
     /**
-     * @param array $header
+     * Проверяет, что заголовок не пустой
+     *
+     * @param array $header Массив заголовков
      *
      * @return ImportError[]
      */
@@ -84,6 +94,11 @@ class FieldValidator
     }
 
     /**
+     * Проверяет существование полей в CRM
+     *
+     * @param array $header           Массив заголовков для проверки
+     * @param ARepository $repository Репозиторий CRM для получения списка полей
+     *
      * @return ImportError[]
      * @throws LoaderException
      */

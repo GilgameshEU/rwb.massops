@@ -5,24 +5,37 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
 }
 
 use Bitrix\Main\AccessDeniedException;
+use Bitrix\Main\ArgumentException;
 use Bitrix\Main\Engine\Contract\Controllerable;
 use Bitrix\Main\Engine\CurrentUser;
 use Bitrix\Main\Loader;
+use Bitrix\Main\LoaderException;
 use Rwb\Massops\Component\Helper\GridDataConverter;
 use Rwb\Massops\Component\Helper\SessionStorage;
 use Rwb\Massops\Import\FieldValidator;
 use Rwb\Massops\Import\Service\CompanyImport;
 use Rwb\Massops\Repository\CRM\Company;
 
+/**
+ * Основной компонент массового импорта компаний
+ */
 class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 {
     private CompanyImport $importService;
     private Company $companyRepository;
 
+    /**
+     * Подготавливает параметры компонента и инициализирует сервисы
+     *
+     * @param array $arParams
+     *
+     * @return array
+     * @throws LoaderException
+     */
     public function onPrepareComponentParams($arParams): array
     {
         if (!Loader::includeModule('rwb.massops')) {
-            throw new \RuntimeException('Module rwb.massops not loaded');
+            throw new RuntimeException('Module rwb.massops not loaded');
         }
 
         $this->companyRepository = new Company();
@@ -33,6 +46,11 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         return parent::onPrepareComponentParams($arParams);
     }
 
+    /**
+     * Конфигурация AJAX-действий компонента
+     *
+     * @return array
+     */
     public function configureActions(): array
     {
         return [
@@ -43,6 +61,11 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         ];
     }
 
+    /**
+     * Основной метод выполнения компонента
+     *
+     * @throws LoaderException
+     */
     public function executeComponent(): void
     {
         if (!CurrentUser::get()->isAdmin()) {
@@ -60,6 +83,13 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $this->includeComponentTemplate();
     }
 
+    /**
+     * Загружает и парсит файл импорта
+     *
+     * @return array
+     * @throws LoaderException
+     * @throws AccessDeniedException
+     */
     public function uploadFileAction(): array
     {
         if (!CurrentUser::get()->isAdmin()) {
@@ -68,7 +98,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
         $file = $_FILES['file'] ?? null;
         if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
-            throw new \RuntimeException('Файл не загружен');
+            throw new RuntimeException('Файл не загружен');
         }
 
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
@@ -77,43 +107,58 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             $ext
         );
 
-        // Проверяем ошибки парсинга
+        // Ошибки парсинга файла
         if (!empty($parseResult['errors'])) {
-            $errorMessages = array_map(
-                fn($error) => $error->toArray(),
-                $parseResult['errors']
-            );
             return [
                 'success' => false,
-                'errors' => $errorMessages,
+                'errors' => array_map(
+                    fn($error) => $error->toArray(),
+                    $parseResult['errors']
+                ),
             ];
         }
 
         $rows = $parseResult['data'];
 
         $validator = new FieldValidator();
-        $validationErrors = $validator->validate($rows, $this->companyRepository);
+        $validationErrors = $validator->validate(
+            $rows,
+            $this->companyRepository
+        );
 
-        // Проверяем ошибки валидации
+        // Ошибки валидации данных
         if (!empty($validationErrors)) {
-            $errorMessages = array_map(
-                fn($error) => $error->toArray(),
-                $validationErrors
-            );
             return [
                 'success' => false,
-                'errors' => $errorMessages,
+                'errors' => array_map(
+                    fn($error) => $error->toArray(),
+                    $validationErrors
+                ),
             ];
         }
 
         $headerRow = array_shift($rows);
-        $gridData = GridDataConverter::convertToGridFormat($rows, $headerRow);
+        $gridData = GridDataConverter::convertToGridFormat(
+            $rows,
+            $headerRow
+        );
 
-        SessionStorage::save($gridData['columns'], $gridData['rows']);
+        SessionStorage::save(
+            $gridData['columns'],
+            $gridData['rows']
+        );
 
-        return ['total' => count($gridData['rows'])];
+        return [
+            'total' => count($gridData['rows']),
+        ];
     }
 
+    /**
+     * Выполняет импорт компаний из сохранённых данных
+     *
+     * @return array
+     * @throws AccessDeniedException
+     */
     public function importCompaniesAction(): array
     {
         if (!CurrentUser::get()->isAdmin()) {
@@ -121,14 +166,16 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         }
 
         if (!SessionStorage::hasData()) {
-            throw new \RuntimeException('Нет данных для импорта');
+            throw new RuntimeException('Нет данных для импорта');
         }
 
-        $result = $this->importService->import(
-            SessionStorage::getRows()
-        );
+        try {
+            $result = $this->importService->import(
+                SessionStorage::getRows()
+            );
+        } catch (ArgumentException|LoaderException $e) {
+        }
 
-        // Конвертируем ошибки в формат для грида
         $gridErrors = [];
         foreach ($result['errors'] as $rowIndex => $rowErrors) {
             $gridErrors[$rowIndex] = array_map(
@@ -144,6 +191,11 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         ];
     }
 
+    /**
+     * Очищает данные импорта из сессии
+     *
+     * @return array
+     */
     public function clearAction(): array
     {
         SessionStorage::clear();
@@ -151,18 +203,29 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         return ['status' => 'success'];
     }
 
+    /**
+     * Скачивает CSV-шаблон для импорта компаний
+     *
+     * @throws AccessDeniedException|LoaderException
+     */
     public function downloadTemplateAction(): void
     {
         if (!CurrentUser::get()->isAdmin()) {
-            throw new \Bitrix\Main\AccessDeniedException();
+            throw new AccessDeniedException();
         }
+
         $fields = $this->companyRepository->getFieldList();
+
         header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="company_import_template.csv"');
+        header(
+            'Content-Disposition: attachment; filename="company_import_template.csv"'
+        );
+
         $output = fopen('php://output', 'w');
         fwrite($output, "\xEF\xBB\xBF");
         fputcsv($output, array_values($fields), ';');
         fclose($output);
+
         die();
     }
 }

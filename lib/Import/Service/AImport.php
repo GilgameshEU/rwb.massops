@@ -1,12 +1,12 @@
 <?php
 
-
 namespace Rwb\Massops\Import\Service;
 
 use Bitrix\Main\ArgumentException;
 use Bitrix\Main\LoaderException;
+use Exception;
+use InvalidArgumentException;
 use RuntimeException;
-use Rwb\Massops\Import\FieldValidator;
 use Rwb\Massops\Import\ImportError;
 use Rwb\Massops\Import\Parser\Csv;
 use Rwb\Massops\Import\Parser\Xlsx;
@@ -14,11 +14,23 @@ use Rwb\Massops\Import\RowNormalizer;
 use Rwb\Massops\Import\ValidationResult;
 use Rwb\Massops\Repository\CRM\ARepository;
 
+/**
+ * Базовый сервис импорта данных
+ *
+ * Реализует общий алгоритм импорта:
+ * - нормализация строк
+ * - валидация
+ * - сохранение через репозиторий
+ */
 abstract class AImport
 {
     protected ARepository $repository;
     protected RowNormalizer $normalizer;
 
+    /**
+     * @param ARepository $repository Репозиторий CRM-сущности
+     * @param RowNormalizer $normalizer Нормализатор строк импорта
+     */
     public function __construct(
         ARepository $repository,
         RowNormalizer $normalizer
@@ -28,9 +40,14 @@ abstract class AImport
     }
 
     /**
-     * Основной импорт
+     * Выполняет импорт данных
      *
-     * @throws LoaderException|ArgumentException
+     * @param array $rows Данные для импорта
+     *
+     * @return array{success: int, errors: array}
+     *
+     * @throws LoaderException
+     * @throws ArgumentException
      */
     public function import(array $rows): array
     {
@@ -51,14 +68,14 @@ abstract class AImport
 
             if (!$validation->isValid()) {
                 $rowErrors = $validation->getErrors();
-                // Устанавливаем номер строки для всех ошибок валидации
+
                 foreach ($rowErrors as $error) {
                     if ($error->row === null) {
                         $errors[$rowIndex][] = new ImportError(
                             type: $error->type,
                             code: $error->code,
                             message: $error->message,
-                            row: $rowIndex + 1, // +1 потому что обычно строки считаются с 1
+                            row: $rowIndex + 1,
                             field: $error->field,
                             context: $error->context
                         );
@@ -78,7 +95,6 @@ abstract class AImport
             if ($result->isSuccess()) {
                 $success++;
             } else {
-                // Конвертируем ошибки Bitrix Result в ImportError
                 $rowErrors = [];
                 foreach ($result->getErrorMessages() as $message) {
                     $rowErrors[] = new ImportError(
@@ -99,7 +115,10 @@ abstract class AImport
     }
 
     /**
-     * Парсинг файла
+     * Парсит файл импорта
+     *
+     * @param string $path Путь к файлу
+     * @param string $ext  Расширение файла
      *
      * @return array{data: array, errors: ImportError[]}
      */
@@ -111,7 +130,7 @@ abstract class AImport
             $parser = match ($ext) {
                 'csv' => new Csv(),
                 'xlsx' => new Xlsx(),
-                default => throw new \InvalidArgumentException('Unsupported format'),
+                default => throw new InvalidArgumentException('Unsupported format'),
             };
 
             $data = $this->normalizeUtf8(
@@ -122,33 +141,24 @@ abstract class AImport
                 'data' => $data,
                 'errors' => $errors,
             ];
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException|InvalidArgumentException $e) {
             $errors[] = new ImportError(
                 type: 'file',
                 code: 'FILE_INVALID',
                 message: $e->getMessage()
             );
+
             return [
                 'data' => [],
                 'errors' => $errors,
             ];
-        } catch (\InvalidArgumentException $e) {
-            $errors[] = new ImportError(
-                type: 'file',
-                code: 'FILE_INVALID',
-                message: $e->getMessage()
-            );
-            return [
-                'data' => [],
-                'errors' => $errors,
-            ];
-        } catch (\Exception $e) {
-            // Обрабатываем любые другие исключения от парсеров (например, PhpOffice)
+        } catch (Exception $e) {
             $errors[] = new ImportError(
                 type: 'file',
                 code: 'FILE_INVALID',
                 message: 'Ошибка при чтении файла: ' . $e->getMessage()
             );
+
             return [
                 'data' => [],
                 'errors' => $errors,
@@ -156,6 +166,13 @@ abstract class AImport
         }
     }
 
+    /**
+     * Приводит данные к UTF-8
+     *
+     * @param array $data Исходные данные
+     *
+     * @return array
+     */
     private function normalizeUtf8(array $data): array
     {
         array_walk_recursive($data, function (&$value) {
@@ -178,7 +195,15 @@ abstract class AImport
     }
 
     /**
-     * Проверка строки (переопределяется в наследниках)
+     * Выполняет валидацию строки импорта
+     *
+     * Реализуется в конкретных сервисах импорта.
+     *
+     * @param array $fields Основные поля
+     * @param array $uf     Пользовательские поля
+     * @param array $fm     Мультиполя
+     *
+     * @return ValidationResult
      */
     abstract protected function validateRow(
         array $fields,

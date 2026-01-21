@@ -13,13 +13,28 @@ use Bitrix\Main\Result;
 use CCrmFieldInfoAttr;
 use RuntimeException;
 
+/**
+ * Базовый репозиторий CRM сущности
+ */
 abstract class ARepository
 {
+    /**
+     * Возвращает тип CRM сущности
+     *
+     * @return int
+     */
     abstract public function getType(): int;
 
+    /**
+     * Возвращает имя сущности
+     *
+     * @return string
+     */
     abstract public function getName(): string;
 
     /**
+     * Инициализирует контекст CRM
+     *
      * @throws LoaderException
      */
     protected function initContext(): void
@@ -28,6 +43,8 @@ abstract class ARepository
     }
 
     /**
+     * Возвращает CRM Factory
+     *
      * @throws LoaderException
      */
     public function getFactory(): Factory
@@ -45,8 +62,11 @@ abstract class ARepository
     }
 
     /**
-     * Получение списка доступных полей (для шаблона / маппинга)
+     * Возвращает список доступных полей сущности
      *
+     * Используется для шаблона и маппинга полей импорта
+     *
+     * @return array<string, string>
      * @throws LoaderException
      */
     public function getFieldList(): array
@@ -71,7 +91,14 @@ abstract class ARepository
         return $result;
     }
 
-    protected function isFieldExcluded($field): bool
+    /**
+     * Проверяет, должно ли поле быть исключено
+     *
+     * @param object $field
+     *
+     * @return bool
+     */
+    protected function isFieldExcluded(object $field): bool
     {
         $attributes = $field->getAttributes();
 
@@ -92,7 +119,14 @@ abstract class ARepository
     }
 
     /**
+     * Добавляет элемент CRM
      *
+     * @param array $fields           Основные поля
+     * @param array $uf               Пользовательские поля
+     * @param array $fm               Мультиполя
+     * @param callable|null $settings Настройка операции
+     *
+     * @return Result
      * @throws ArgumentException|LoaderException
      */
     public function add(
@@ -126,6 +160,9 @@ abstract class ARepository
     }
 
     /**
+     * Возвращает информацию о полях сущности
+     *
+     * @return array
      * @throws LoaderException
      */
     public function getFieldsInfo(): array

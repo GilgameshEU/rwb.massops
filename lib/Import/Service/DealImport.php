@@ -7,8 +7,14 @@ use Rwb\Massops\Import\ValidationResult;
 use Rwb\Massops\Repository\CRM\Deal;
 use Rwb\Massops\Import\RowNormalizer;
 
+/**
+ * Сервис импорта сделок
+ */
 class DealImport extends AImport
 {
+    /**
+     * @param Deal $repository Репозиторий сделок CRM
+     */
     public function __construct(Deal $repository)
     {
         parent::__construct(
@@ -17,6 +23,15 @@ class DealImport extends AImport
         );
     }
 
+    /**
+     * Выполняет валидацию строки импорта сделки
+     *
+     * @param array $fields Основные поля
+     * @param array $uf     Пользовательские поля
+     * @param array $fm     Мультиполя
+     *
+     * @return ValidationResult
+     */
     protected function validateRow(
         array $fields,
         array $uf,
@@ -25,21 +40,25 @@ class DealImport extends AImport
         $result = new ValidationResult();
 
         if (empty($fields['TITLE'])) {
-            $result->addError(new ImportError(
-                type: 'field',
-                code: 'REQUIRED',
-                message: 'Не заполнено поле TITLE',
-                field: 'TITLE'
-            ));
+            $result->addError(
+                new ImportError(
+                    type: 'field',
+                    code: 'REQUIRED',
+                    message: 'Не заполнено поле TITLE',
+                    field: 'TITLE'
+                )
+            );
         }
 
         if (empty($fields['STAGE_ID'])) {
-            $result->addError(new ImportError(
-                type: 'field',
-                code: 'REQUIRED',
-                message: 'Не заполнена стадия сделки',
-                field: 'STAGE_ID'
-            ));
+            $result->addError(
+                new ImportError(
+                    type: 'field',
+                    code: 'REQUIRED',
+                    message: 'Не заполнена стадия сделки',
+                    field: 'STAGE_ID'
+                )
+            );
         }
 
         return $result;

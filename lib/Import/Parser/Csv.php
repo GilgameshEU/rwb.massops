@@ -2,14 +2,28 @@
 
 namespace Rwb\Massops\Import\Parser;
 
-class Csv extends AParser
+use RuntimeException;
+
+/**
+ * Парсер CSV-файлов
+ */
+class Csv implements IParser
 {
+    /**
+     * Читает CSV-файл и возвращает данные в виде массива строк
+     *
+     * @param string $path Путь к CSV-файлу
+     *
+     * @return array Массив строк файла
+     *
+     * @throws RuntimeException Если файл невозможно прочитать
+     */
     public function parse(string $path): array
     {
         $rows = [];
         $content = file_get_contents($path);
         if ($content === false) {
-            throw new \RuntimeException('Cannot read CSV file');
+            throw new RuntimeException('Cannot read CSV file');
         }
 
         $content = preg_replace('/^\xEF\xBB\xBF/', '', $content);

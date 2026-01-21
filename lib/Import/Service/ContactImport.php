@@ -7,8 +7,14 @@ use Rwb\Massops\Import\ValidationResult;
 use Rwb\Massops\Repository\CRM\Contact;
 use Rwb\Massops\Import\RowNormalizer;
 
+/**
+ * Сервис импорта контактов
+ */
 class ContactImport extends AImport
 {
+    /**
+     * @param Contact $repository Репозиторий контактов CRM
+     */
     public function __construct(Contact $repository)
     {
         parent::__construct(
@@ -17,6 +23,15 @@ class ContactImport extends AImport
         );
     }
 
+    /**
+     * Выполняет валидацию строки импорта контакта
+     *
+     * @param array $fields Основные поля
+     * @param array $uf     Пользовательские поля
+     * @param array $fm     Мультиполя
+     *
+     * @return ValidationResult
+     */
     protected function validateRow(
         array $fields,
         array $uf,
@@ -29,12 +44,14 @@ class ContactImport extends AImport
             && empty($fm['PHONE'])
             && empty($fm['EMAIL'])
         ) {
-            $result->addError(new ImportError(
-                type: 'field',
-                code: 'REQUIRED',
-                message: 'Контакт должен иметь имя или телефон / email',
-                field: 'NAME'
-            ));
+            $result->addError(
+                new ImportError(
+                    type: 'field',
+                    code: 'REQUIRED',
+                    message: 'Контакт должен иметь имя или телефон / email',
+                    field: 'NAME'
+                )
+            );
         }
 
         return $result;
