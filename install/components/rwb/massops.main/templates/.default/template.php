@@ -17,6 +17,10 @@ Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'main
     <input type="file" id="rwb-import-file" accept=".csv,.xlsx">
     <button class="ui-btn ui-btn-primary" id="rwb-import-upload">Загрузить файл</button>
     <button class="ui-btn" id="rwb-import-template">Скачать шаблон</button>
+    <label style="margin-left: 10px; margin-right: 10px;">
+        <input type="checkbox" id="rwb-import-dry-run" style="margin-right: 5px;">
+        Dry Run (тестовый режим)
+    </label>
     <button class="ui-btn ui-btn-success" id="rwb-import-run">Импортировать компании</button>
     <button class="ui-btn ui-btn-light-danger" id="rwb-import-clear">Очистить</button>
 </div>

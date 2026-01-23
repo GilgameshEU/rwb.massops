@@ -25,34 +25,45 @@
          */
         handleImport: function(importBtn, container) {
             const originalText = importBtn.textContent;
+            const dryRunCheckbox = BX('rwb-import-dry-run');
+            const isDryRun = dryRunCheckbox && dryRunCheckbox.checked;
 
             // Показываем индикатор загрузки
-            this.setLoading(importBtn, true, 'Импорт...');
+            const loadingText = isDryRun ? 'Dry Run...' : 'Импорт...';
+            this.setLoading(importBtn, true, loadingText);
 
-            BX.ajax.runComponentAction('rwb:massops.main', 'importCompanies', {
+            const action = isDryRun ? 'dryRunImport' : 'importCompanies';
+
+            BX.ajax.runComponentAction('rwb:massops.main', action, {
                 mode: 'class'
             }).then(function(response) {
                 this.setLoading(importBtn, false, originalText);
 
-                // Проверяем наличие ошибок валидации
+                // Собираем все ошибки в один массив для отображения
+                const allErrors = [];
                 if (response.data && response.data.errors && Object.keys(response.data.errors).length > 0) {
-                    // Собираем все ошибки в один массив для отображения
-                    const allErrors = [];
                     Object.keys(response.data.errors).forEach(function(rowIndex) {
                         response.data.errors[rowIndex].forEach(function(error) {
                             allErrors.push(error);
                         });
                     });
+                }
 
-                    window.RwbImportErrorHandler.showImportErrors(
-                        allErrors,
-                        response.data.errors,
-                        response.data.added || 0,
-                        container
-                    );
-                } else {
-                    // Если ошибок нет, показываем успешное сообщение
-                    alert('Импорт завершён. Добавлено компаний: ' + (response.data.added || 0));
+                const addedCount = response.data.added || response.data.wouldBeAdded || 0;
+                const wouldBeAddedDetails = response.data.wouldBeAddedDetails || response.data.addedDetails || {};
+
+                // Всегда показываем результаты в окне ошибок (включая успешные добавления)
+                window.RwbImportErrorHandler.showImportErrors(
+                    allErrors,
+                    response.data.errors || {},
+                    addedCount,
+                    container,
+                    isDryRun,
+                    wouldBeAddedDetails
+                );
+
+                // Если нет ошибок и не dry run, перезагружаем страницу
+                if (!isDryRun && allErrors.length === 0) {
                     location.reload();
                 }
             }.bind(this)).catch(function(error) {

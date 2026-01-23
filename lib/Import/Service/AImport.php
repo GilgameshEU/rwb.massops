@@ -51,12 +51,59 @@ abstract class AImport
      */
     public function import(array $rows): array
     {
+        $result = $this->processRows($rows, ImportMode::IMPORT);
+
+        return [
+            'success' => $result['success'],
+            'errors' => $result['errors'],
+            'added' => $result['items'],
+        ];
+    }
+
+    /**
+     * Выполняет dry run импорта (симуляция без сохранения)
+     *
+     * @param array $rows Данные для импорта
+     *
+     * @return array{success: int, errors: array, wouldBeAdded: array}
+     *
+     * @throws LoaderException
+     * @throws ArgumentException
+     */
+    public function dryRun(array $rows): array
+    {
+        $result = $this->processRows($rows, ImportMode::DRY_RUN);
+
+        return [
+            'success' => $result['success'],
+            'errors' => $result['errors'],
+            'wouldBeAdded' => $result['items'],
+        ];
+    }
+
+    /**
+     * Обрабатывает строки импорта: валидация, нормализация и подготовка данных
+     *
+     * @param array $rows Исходные строки файла
+     *
+     * @return array{
+     *     success: int,
+     *     errors: array<int, ImportError[]>,
+     *     prepared: array<int, array{row: int, data: array}>
+     * }
+     *
+     * @throws LoaderException
+     * @throws ArgumentException
+     */
+    protected function processRows(array $rows, string $mode): array
+    {
         $fieldCodes = array_keys(
             $this->repository->getFieldList()
         );
 
         $success = 0;
         $errors = [];
+        $items = [];
 
         foreach ($rows as $rowIndex => $row) {
             [$fields, $uf, $fm] = $this->normalizer->normalize(
@@ -67,51 +114,73 @@ abstract class AImport
             $validation = $this->validateRow($fields, $uf, $fm);
 
             if (!$validation->isValid()) {
-                $rowErrors = $validation->getErrors();
-
-                foreach ($rowErrors as $error) {
-                    if ($error->row === null) {
-                        $errors[$rowIndex][] = new ImportError(
-                            type: $error->type,
-                            code: $error->code,
-                            message: $error->message,
-                            row: $rowIndex + 1,
-                            field: $error->field,
-                            context: $error->context
-                        );
-                    } else {
-                        $errors[$rowIndex][] = $error;
-                    }
+                foreach ($validation->getErrors() as $error) {
+                    $errors[$rowIndex][] = $this->attachRowToError(
+                        $error,
+                        $rowIndex
+                    );
                 }
                 continue;
             }
 
-            $result = $this->repository->add(
-                $fields,
-                $uf,
-                $fm
-            );
+            if ($mode === ImportMode::IMPORT) {
+                $result = $this->repository->add(
+                    $fields,
+                    $uf,
+                    $fm
+                );
 
-            if ($result->isSuccess()) {
-                $success++;
-            } else {
-                $rowErrors = [];
-                foreach ($result->getErrorMessages() as $message) {
-                    $rowErrors[] = new ImportError(
-                        type: 'system',
-                        code: 'INVALID',
-                        message: $message,
-                        row: $rowIndex + 1
-                    );
+                if (!$result->isSuccess()) {
+                    foreach ($result->getErrorMessages() as $message) {
+                        $errors[$rowIndex][] = new ImportError(
+                            type: 'system',
+                            code: 'INVALID',
+                            message: $message,
+                            row: $rowIndex + 1
+                        );
+                    }
+                    continue;
                 }
-                $errors[$rowIndex] = $rowErrors;
             }
+
+            $success++;
+            $items[$rowIndex] = [
+                'row' => $rowIndex + 1,
+                'data' => $fields,
+            ];
         }
 
         return [
             'success' => $success,
             'errors' => $errors,
+            'items' => $items,
         ];
+    }
+
+    /**
+     * Привязывает номер строки к ошибке импорта
+     *
+     * @param ImportError $error Объект ошибки
+     * @param int $rowIndex      Номер строки файла
+     *
+     * @return ImportError
+     */
+    protected function attachRowToError(
+        ImportError $error,
+        int $rowIndex
+    ): ImportError {
+        if ($error->row !== null) {
+            return $error;
+        }
+
+        return new ImportError(
+            type: $error->type,
+            code: $error->code,
+            message: $error->message,
+            row: $rowIndex + 1,
+            field: $error->field,
+            context: $error->context
+        );
     }
 
     /**
@@ -147,23 +216,18 @@ abstract class AImport
                 code: 'FILE_INVALID',
                 message: $e->getMessage()
             );
-
-            return [
-                'data' => [],
-                'errors' => $errors,
-            ];
         } catch (Exception $e) {
             $errors[] = new ImportError(
                 type: 'file',
                 code: 'FILE_INVALID',
                 message: 'Ошибка при чтении файла: ' . $e->getMessage()
             );
-
-            return [
-                'data' => [],
-                'errors' => $errors,
-            ];
         }
+
+        return [
+            'data' => [],
+            'errors' => $errors,
+        ];
     }
 
     /**

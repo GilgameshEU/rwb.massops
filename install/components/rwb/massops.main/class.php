@@ -57,6 +57,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'uploadFile' => ['prefilters' => []],
             'downloadTemplate' => ['prefilters' => []],
             'importCompanies' => ['prefilters' => []],
+            'dryRunImport' => ['prefilters' => []],
             'clear' => ['prefilters' => []],
         ];
     }
@@ -184,10 +185,62 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             );
         }
 
+        $addedDetails = [];
+        if (isset($result['added'])) {
+            foreach ($result['added'] as $rowIndex => $item) {
+                $addedDetails[$rowIndex] = $item;
+            }
+        }
+
         return [
             'success' => true,
             'added' => $result['success'],
             'errors' => $gridErrors,
+            'addedDetails' => $addedDetails,
+        ];
+    }
+
+    /**
+     * Выполняет dry run импорта компаний (симуляция без сохранения)
+     *
+     * @return array
+     * @throws AccessDeniedException
+     */
+    public function dryRunImportAction(): array
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new AccessDeniedException();
+        }
+
+        if (!SessionStorage::hasData()) {
+            throw new RuntimeException('Нет данных для импорта');
+        }
+
+        try {
+            $result = $this->importService->dryRun(
+                SessionStorage::getRows()
+            );
+        } catch (ArgumentException|LoaderException $e) {
+        }
+
+        $gridErrors = [];
+        foreach ($result['errors'] as $rowIndex => $rowErrors) {
+            $gridErrors[$rowIndex] = array_map(
+                fn($error) => $error->toArray(),
+                $rowErrors
+            );
+        }
+
+        $wouldBeAdded = [];
+        foreach ($result['wouldBeAdded'] as $rowIndex => $item) {
+            $wouldBeAdded[$rowIndex] = $item;
+        }
+
+        return [
+            'success' => true,
+            'wouldBeAdded' => $result['success'],
+            'errors' => $gridErrors,
+            'wouldBeAddedDetails' => $wouldBeAdded,
         ];
     }
 
