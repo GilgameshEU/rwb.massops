@@ -3,6 +3,7 @@
 namespace Rwb\Massops\Import\Service;
 
 use Bitrix\Main\ArgumentException;
+use Bitrix\Main\InvalidOperationException;
 use Bitrix\Main\LoaderException;
 use Exception;
 use InvalidArgumentException;
@@ -28,7 +29,7 @@ abstract class AImport
     protected RowNormalizer $normalizer;
 
     /**
-     * @param ARepository $repository Репозиторий CRM-сущности
+     * @param ARepository $repository   Репозиторий CRM-сущности
      * @param RowNormalizer $normalizer Нормализатор строк импорта
      */
     public function __construct(
@@ -47,7 +48,7 @@ abstract class AImport
      * @return array{success: int, errors: array}
      *
      * @throws LoaderException
-     * @throws ArgumentException
+     * @throws ArgumentException|InvalidOperationException
      */
     public function import(array $rows): array
     {
@@ -68,7 +69,7 @@ abstract class AImport
      * @return array{success: int, errors: array, wouldBeAdded: array}
      *
      * @throws LoaderException
-     * @throws ArgumentException
+     * @throws ArgumentException|InvalidOperationException
      */
     public function dryRun(array $rows): array
     {
@@ -82,18 +83,15 @@ abstract class AImport
     }
 
     /**
-     * Обрабатывает строки импорта: валидация, нормализация и подготовка данных
+     * Обрабатывает строки импорта
      *
-     * @param array $rows Исходные строки файла
+     * @param array $rows  Данные строк
+     * @param string $mode Режим импорта (IMPORT | DRY_RUN)
      *
-     * @return array{
-     *     success: int,
-     *     errors: array<int, ImportError[]>,
-     *     prepared: array<int, array{row: int, data: array}>
-     * }
+     * @return array{success: int, errors: array, items: array}
      *
      * @throws LoaderException
-     * @throws ArgumentException
+     * @throws ArgumentException|InvalidOperationException
      */
     protected function processRows(array $rows, string $mode): array
     {
@@ -105,12 +103,15 @@ abstract class AImport
         $errors = [];
         $items = [];
 
+        $dryRun = ($mode === ImportMode::DRY_RUN);
+
         foreach ($rows as $rowIndex => $row) {
             [$fields, $uf, $fm] = $this->normalizer->normalize(
                 array_values($row['data']),
                 $fieldCodes
             );
 
+            // 1. Бизнес-валидация
             $validation = $this->validateRow($fields, $uf, $fm);
 
             if (!$validation->isValid()) {
@@ -123,24 +124,24 @@ abstract class AImport
                 continue;
             }
 
-            if ($mode === ImportMode::IMPORT) {
-                $result = $this->repository->add(
-                    $fields,
-                    $uf,
-                    $fm
-                );
+            // 2. CRM-валидация / сохранение
+            $result = $this->repository->add(
+                $fields,
+                $uf,
+                $fm,
+                $dryRun
+            );
 
-                if (!$result->isSuccess()) {
-                    foreach ($result->getErrorMessages() as $message) {
-                        $errors[$rowIndex][] = new ImportError(
-                            type: 'system',
-                            code: 'INVALID',
-                            message: $message,
-                            row: $rowIndex + 1
-                        );
-                    }
-                    continue;
+            if (!$result->isSuccess()) {
+                foreach ($result->getErrorMessages() as $message) {
+                    $errors[$rowIndex][] = new ImportError(
+                        type: 'validation',
+                        code: 'INVALID',
+                        message: $message,
+                        row: $rowIndex + 1
+                    );
                 }
+                continue;
             }
 
             $success++;

@@ -7,6 +7,7 @@ use Bitrix\Crm\Multifield\Assembler;
 use Bitrix\Crm\Service\Container;
 use Bitrix\Crm\Service\Factory;
 use Bitrix\Main\ArgumentException;
+use Bitrix\Main\InvalidOperationException;
 use Bitrix\Main\Loader;
 use Bitrix\Main\LoaderException;
 use Bitrix\Main\Result;
@@ -121,19 +122,19 @@ abstract class ARepository
     /**
      * Добавляет элемент CRM
      *
-     * @param array $fields           Основные поля
-     * @param array $uf               Пользовательские поля
-     * @param array $fm               Мультиполя
-     * @param callable|null $settings Настройка операции
+     * @param array $fields Основные поля
+     * @param array $uf     Пользовательские поля
+     * @param array $fm     Мультиполя
+     * @param bool $dryRun  Выполнить валидацию без сохранения
      *
      * @return Result
-     * @throws ArgumentException|LoaderException
+     * @throws ArgumentException|LoaderException|InvalidOperationException
      */
     public function add(
         array $fields,
         array $uf = [],
         array $fm = [],
-        ?callable $settings = null
+        bool $dryRun = false
     ): Result {
         $factory = $this->getFactory();
 
@@ -152,8 +153,8 @@ abstract class ARepository
         $operation = $factory->getAddOperation($item);
         $operation->disableCheckAccess();
 
-        if ($settings) {
-            $settings($operation);
+        if ($dryRun === true) {
+            return $operation->checkFields();
         }
 
         return $operation->launch();
