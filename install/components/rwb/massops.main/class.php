@@ -8,6 +8,7 @@ use Bitrix\Main\AccessDeniedException;
 use Bitrix\Main\ArgumentException;
 use Bitrix\Main\Engine\Contract\Controllerable;
 use Bitrix\Main\Engine\CurrentUser;
+use Bitrix\Main\InvalidOperationException;
 use Bitrix\Main\Loader;
 use Bitrix\Main\LoaderException;
 use Rwb\Massops\Component\Helper\GridDataConverter;
@@ -158,7 +159,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
      * Выполняет импорт компаний из сохранённых данных
      *
      * @return array
-     * @throws AccessDeniedException
+     * @throws AccessDeniedException|InvalidOperationException
      */
     public function importCompaniesAction(): array
     {
@@ -204,7 +205,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
      * Выполняет dry run импорта компаний (симуляция без сохранения)
      *
      * @return array
-     * @throws AccessDeniedException
+     * @throws AccessDeniedException|InvalidOperationException
      */
     public function dryRunImportAction(): array
     {
