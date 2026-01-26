@@ -13,12 +13,20 @@ use Bitrix\Main\LoaderException;
 use Bitrix\Main\Result;
 use CCrmFieldInfoAttr;
 use RuntimeException;
+use Bitrix\Crm\Field;
 
 /**
  * Базовый репозиторий CRM сущности
  */
 abstract class ARepository
 {
+    /**
+     * Исключенные поля
+     */
+    protected const EXCLUDED_FIELDS = [
+        'OPENED',
+    ];
+
     /**
      * Возвращает тип CRM сущности
      *
@@ -63,16 +71,28 @@ abstract class ARepository
     }
 
     /**
-     * Возвращает список доступных полей сущности
+     * Возвращает мета-информацию о полях CRM-сущности
      *
-     * Используется для шаблона и маппинга полей импорта
+     * Данные кешируются в рамках запроса.
+     * Используется для формирования шаблонов импорта и определения обязательных полей.
      *
-     * @return array<string, string>
+     * @return array<string, array{
+     *     code: string,
+     *     title: string,
+     *     required: bool
+     * }>
+     *
      * @throws LoaderException
      */
-    public function getFieldList(): array
+    protected function getFieldsMeta(): array
     {
-        $result = [];
+        static $cache = null;
+
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $cache = [];
         $fields = $this->getFactory()->getFieldsCollection();
 
         foreach ($fields as $field) {
@@ -81,15 +101,69 @@ abstract class ARepository
             }
 
             if ($field->getName() === Item::FIELD_NAME_FM) {
-                $result['PHONE'] = 'Телефон';
-                $result['EMAIL'] = 'E-mail';
+                $cache['PHONE'] = [
+                    'code' => 'PHONE',
+                    'title' => 'Телефон',
+                    'required' => false,
+                ];
+                $cache['EMAIL'] = [
+                    'code' => 'EMAIL',
+                    'title' => 'E-mail',
+                    'required' => false,
+                ];
                 continue;
             }
 
-            $result[$field->getName()] = $field->getTitle();
+            $cache[$field->getName()] = [
+                'code' => $field->getName(),
+                'title' => $field->getTitle(),
+                'required' => $field->isRequired(),
+            ];
+        }
+
+        return $cache;
+    }
+
+    /**
+     * Возвращает список доступных полей сущности
+     *
+     * Используется для:
+     * - генерации шаблонов импорта
+     * - маппинга полей CSV/XLSX
+     *
+     * @return array<string, string> код => название
+     *
+     * @throws LoaderException
+     */
+    public function getFieldList(): array
+    {
+        $result = [];
+
+        foreach ($this->getFieldsMeta() as $field) {
+            $result[$field['code']] = $field['title'];
         }
 
         return $result;
+    }
+
+    /**
+     * Возвращает список кодов обязательных полей сущности
+     *
+     * @return string[]
+     *
+     * @throws LoaderException
+     */
+    public function getRequiredFieldCodes(): array
+    {
+        $required = [];
+
+        foreach ($this->getFieldsMeta() as $field) {
+            if ($field['required']) {
+                $required[] = $field['code'];
+            }
+        }
+
+        return $required;
     }
 
     /**
@@ -112,7 +186,11 @@ abstract class ARepository
             return true;
         }
 
-        if ($field->getType() === 'file') {
+        if ($field->getType() === Field::TYPE_FILE) {
+            return true;
+        }
+
+        if (in_array($field->getName(), self::EXCLUDED_FIELDS, true)) {
             return true;
         }
 

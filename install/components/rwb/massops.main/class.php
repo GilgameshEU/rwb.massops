@@ -13,6 +13,7 @@ use Bitrix\Main\Loader;
 use Bitrix\Main\LoaderException;
 use Rwb\Massops\Component\Helper\GridDataConverter;
 use Rwb\Massops\Component\Helper\SessionStorage;
+use Rwb\Massops\Component\Helper\XlsxTemplateExporter;
 use Rwb\Massops\Import\FieldValidator;
 use Rwb\Massops\Import\Service\CompanyImport;
 use Rwb\Massops\Repository\CRM\Company;
@@ -56,7 +57,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
     {
         return [
             'uploadFile' => ['prefilters' => []],
-            'downloadTemplate' => ['prefilters' => []],
+            'downloadXlsxTemplate' => ['prefilters' => []],
             'importCompanies' => ['prefilters' => []],
             'dryRunImport' => ['prefilters' => []],
             'clear' => ['prefilters' => []],
@@ -66,7 +67,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
     /**
      * Основной метод выполнения компонента
      *
-     * @throws LoaderException
      */
     public function executeComponent(): void
     {
@@ -75,9 +75,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
             return;
         }
-
-        $this->arResult['COMPANY_FIELDS'] =
-            $this->companyRepository->getFieldList();
 
         $this->arResult['GRID_COLUMNS'] = SessionStorage::getColumns();
         $this->arResult['GRID_ROWS'] = SessionStorage::getRows();
@@ -109,7 +106,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             $ext
         );
 
-        // Ошибки парсинга файла
         if (!empty($parseResult['errors'])) {
             return [
                 'success' => false,
@@ -128,7 +124,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             $this->companyRepository
         );
 
-        // Ошибки валидации данных
         if (!empty($validationErrors)) {
             return [
                 'success' => false,
@@ -262,24 +257,51 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
      *
      * @throws AccessDeniedException|LoaderException
      */
-    public function downloadTemplateAction(): void
+    public function downloadCsvTemplateAction(): void
     {
         if (!CurrentUser::get()->isAdmin()) {
             throw new AccessDeniedException();
         }
 
+        global $APPLICATION;
+        $APPLICATION->restartBuffer();
+
         $fields = $this->companyRepository->getFieldList();
 
-        header('Content-Type: text/csv; charset=UTF-8');
-        header(
-            'Content-Disposition: attachment; filename="company_import_template.csv"'
-        );
+        header('Content-Type: text/csv; charset=windows-1251');
+        header('Content-Disposition: attachment; filename="company_import_template.csv"');
+        header('Pragma: public');
+        header('Cache-Control: max-age=0');
 
         $output = fopen('php://output', 'w');
-        fwrite($output, "\xEF\xBB\xBF");
-        fputcsv($output, array_values($fields), ';');
+
+        // ❗ BOM НЕ нужен для CP1251
+        $row = array_map(
+            static fn($value) => iconv('UTF-8', 'Windows-1251//TRANSLIT', $value),
+            array_values($fields)
+        );
+
+        fputcsv($output, $row, ';');
         fclose($output);
 
         die();
+    }
+
+    /**
+     * Скачивает XLSX-шаблон для импорта компаний
+     *
+     * @throws AccessDeniedException
+     * @throws LoaderException
+     */
+    public function downloadXlsxTemplateAction(): void
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new AccessDeniedException();
+        }
+
+        XlsxTemplateExporter::export(
+            $this->companyRepository->getFieldList(),
+            $this->companyRepository->getRequiredFieldCodes()
+        );
     }
 }

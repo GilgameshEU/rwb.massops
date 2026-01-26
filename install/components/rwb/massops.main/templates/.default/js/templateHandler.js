@@ -1,7 +1,7 @@
 /**
  * Модуль для обработки скачивания шаблона
  */
-(function() {
+(function () {
     'use strict';
 
     window.RwbImportTemplateHandler = {
@@ -10,10 +10,10 @@
          *
          * @param {HTMLElement} templateBtn Кнопка скачивания шаблона
          */
-        init: function(templateBtn) {
-            templateBtn.onclick = function() {
+        init: function (templateBtn) {
+            templateBtn.onclick = function () {
                 window.location.href =
-                    '/bitrix/services/main/ajax.php?c=rwb:massops.main&action=downloadTemplate&mode=class';
+                    '/bitrix/services/main/ajax.php?c=rwb:massops.main&action=downloadXlsxTemplate&mode=class';
             };
         }
     };
