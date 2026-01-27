@@ -24,7 +24,7 @@ class XlsxTemplateExporter
      * @param string[] $requiredCodes
      *        Список кодов обязательных полей
      */
-    public static function export(array $fields, array $requiredCodes): void
+    #[NoReturn] public static function export(array $fields, array $requiredCodes): void
     {
         $requiredMap = array_flip($requiredCodes);
 

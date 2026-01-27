@@ -1,7 +1,7 @@
 /**
  * Модуль для обработки импорта данных
  */
-(function() {
+(function () {
     'use strict';
 
     window.RwbImportImportHandler = {
@@ -11,8 +11,8 @@
          * @param {HTMLElement} importBtn Кнопка импорта
          * @param {HTMLElement} container Контейнер для отображения ошибок
          */
-        init: function(importBtn, container) {
-            importBtn.onclick = function() {
+        init: function (importBtn, container) {
+            importBtn.onclick = function () {
                 this.handleImport(importBtn, container);
             }.bind(this);
         },
@@ -23,7 +23,7 @@
          * @param {HTMLElement} importBtn Кнопка импорта
          * @param {HTMLElement} container Контейнер для отображения ошибок
          */
-        handleImport: function(importBtn, container) {
+        handleImport: function (importBtn, container) {
             const originalText = importBtn.textContent;
             const dryRunCheckbox = BX('rwb-import-dry-run');
             const isDryRun = dryRunCheckbox && dryRunCheckbox.checked;
@@ -36,14 +36,14 @@
 
             BX.ajax.runComponentAction('rwb:massops.main', action, {
                 mode: 'class'
-            }).then(function(response) {
+            }).then(function (response) {
                 this.setLoading(importBtn, false, originalText);
 
                 // Собираем все ошибки в один массив для отображения
                 const allErrors = [];
                 if (response.data && response.data.errors && Object.keys(response.data.errors).length > 0) {
-                    Object.keys(response.data.errors).forEach(function(rowIndex) {
-                        response.data.errors[rowIndex].forEach(function(error) {
+                    Object.keys(response.data.errors).forEach(function (rowIndex) {
+                        response.data.errors[rowIndex].forEach(function (error) {
                             allErrors.push(error);
                         });
                     });
@@ -62,11 +62,7 @@
                     wouldBeAddedDetails
                 );
 
-                // Если нет ошибок и не dry run, перезагружаем страницу
-                if (!isDryRun && allErrors.length === 0) {
-                    location.reload();
-                }
-            }.bind(this)).catch(function(error) {
+            }.bind(this)).catch(function (error) {
                 this.setLoading(importBtn, false, originalText);
 
                 const errors = window.RwbImportErrorHandler.parseBitrixError(error);
@@ -85,7 +81,7 @@
          * @param {boolean} isLoading Состояние загрузки
          * @param {string} text Текст кнопки
          */
-        setLoading: function(button, isLoading, text) {
+        setLoading: function (button, isLoading, text) {
             button.disabled = isLoading;
             button.textContent = text;
         }
