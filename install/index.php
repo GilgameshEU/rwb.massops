@@ -230,6 +230,7 @@ class rwb_massops extends CModule
      *
      * @return void
      * @throws ArgumentNullException
+     * @throws ArgumentException
      */
     public function unInstallOptions(): void
     {
