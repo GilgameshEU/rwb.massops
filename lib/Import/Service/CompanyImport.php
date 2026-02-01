@@ -2,8 +2,6 @@
 
 namespace Rwb\Massops\Import\Service;
 
-use Rwb\Massops\Import\ImportError;
-use Rwb\Massops\Import\ValidationResult;
 use Rwb\Massops\Repository\CRM\Company;
 use Rwb\Massops\Import\RowNormalizer;
 
@@ -21,35 +19,5 @@ class CompanyImport extends AImport
             $repository,
             new RowNormalizer()
         );
-    }
-
-    /**
-     * Выполняет валидацию строки импорта компании
-     *
-     * @param array $fields Основные поля
-     * @param array $uf     Пользовательские поля
-     * @param array $fm     Мультиполя
-     *
-     * @return ValidationResult
-     */
-    protected function validateRow(
-        array $fields,
-        array $uf,
-        array $fm
-    ): ValidationResult {
-        $result = new ValidationResult();
-
-        if (empty($fields['TITLE'])) {
-            $result->addError(
-                new ImportError(
-                    type: 'field',
-                    code: 'REQUIRED',
-                    message: 'Не заполнено обязательное поле: Название компании',
-                    field: 'TITLE'
-                )
-            );
-        }
-
-        return $result;
     }
 }

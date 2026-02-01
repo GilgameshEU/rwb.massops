@@ -1,0 +1,90 @@
+/* ===== Грид: подсветка строк ===== */
+
+.rwb-grid-row-error > td {
+    background-color: #fee2e2 !important;
+}
+.rwb-grid-row-error {
+    cursor: help;
+}
+
+.rwb-grid-row-success > td {
+    background-color: #f0fdf4 !important;
+}
+
+/* ===== Блок результатов / ошибок ===== */
+
+.rwb-result-block {
+    margin-top: 15px;
+    margin-bottom: 15px;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+/* Модификаторы цвета блока */
+.rwb-result-block--warning {
+    background-color: #ffeaa7;
+    border: 1px solid #fdcb6e;
+    color: #2d3436;
+}
+
+.rwb-result-block--success {
+    background-color: #d1fae5;
+    border: 1px solid #6ee7b7;
+    color: #065f46;
+}
+
+.rwb-result-block--error {
+    background-color: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
+.rwb-result-block--info {
+    background-color: #dbeafe;
+    border: 1px solid #93c5fd;
+    color: #1e40af;
+}
+
+/* Заголовок блока */
+.rwb-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.rwb-result-title {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.rwb-result-close {
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    color: #636e72;
+    padding: 0 5px;
+}
+
+/* Статистика */
+.rwb-result-stats {
+    font-size: 14px;
+}
+
+/* Сводка ошибок */
+.rwb-result-summary-title {
+    font-weight: bold;
+    margin-top: 10px;
+    margin-bottom: 5px;
+    font-size: 13px;
+}
+
+.rwb-result-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.rwb-result-list li {
+    margin-bottom: 3px;
+    font-size: 13px;
+}

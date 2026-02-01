@@ -1,16 +1,20 @@
 <?php
 
+use Bitrix\Main\Page\Asset;
+use Bitrix\Main\UI\Extension;
+
 if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
     die();
 }
 
-\Bitrix\Main\UI\Extension::load("ui.buttons");
+Extension::load("ui.buttons");
 
-Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'errorHandler.js');
-Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'uploadHandler.js');
-Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'importHandler.js');
-Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'templateHandler.js');
-Bitrix\Main\Page\Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'main.js');
+Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'errorHandler.js');
+Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'uploadHandler.js');
+Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'importHandler.js');
+Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'gridHighlighter.js');
+Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'templateHandler.js');
+Asset::getInstance()->AddJS($this->GetFolder() . '/js/' . 'main.js');
 ?>
 
 <div style="margin-bottom: 20px;">

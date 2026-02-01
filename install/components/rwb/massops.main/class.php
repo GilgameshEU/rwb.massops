@@ -151,10 +151,28 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
     }
 
     /**
+     * Возвращает маппинг кодов полей CRM на ID колонок грида
+     *
+     * @return array<string, string> ['TITLE' => 'COL_0', 'PHONE' => 'COL_1', ...]
+     * @throws LoaderException
+     */
+    private function getFieldToColumnMapping(): array
+    {
+        $fieldCodes = array_keys($this->companyRepository->getFieldList());
+        $mapping = [];
+
+        foreach ($fieldCodes as $index => $code) {
+            $mapping[$code] = 'COL_' . $index;
+        }
+
+        return $mapping;
+    }
+
+    /**
      * Выполняет импорт компаний из сохранённых данных
      *
      * @return array
-     * @throws AccessDeniedException|InvalidOperationException
+     * @throws AccessDeniedException|InvalidOperationException|LoaderException
      */
     public function importCompaniesAction(): array
     {
@@ -193,6 +211,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'added' => $result['success'],
             'errors' => $gridErrors,
             'addedDetails' => $addedDetails,
+            'fieldToColumn' => $this->getFieldToColumnMapping(),
         ];
     }
 
@@ -200,7 +219,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
      * Выполняет dry run импорта компаний (симуляция без сохранения)
      *
      * @return array
-     * @throws AccessDeniedException|InvalidOperationException
+     * @throws AccessDeniedException|InvalidOperationException|LoaderException
      */
     public function dryRunImportAction(): array
     {
@@ -237,6 +256,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'wouldBeAdded' => $result['success'],
             'errors' => $gridErrors,
             'wouldBeAddedDetails' => $wouldBeAdded,
+            'fieldToColumn' => $this->getFieldToColumnMapping(),
         ];
     }
 
