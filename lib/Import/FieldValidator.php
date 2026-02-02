@@ -7,17 +7,22 @@ use Rwb\Massops\Repository\CRM\ARepository;
 
 class FieldValidator
 {
+    private string $entityTitle = '';
+
     /**
      * Валидирует поля импортируемых данных
      *
      * @param array $rows             Массив строк данных для импорта
      * @param ARepository $repository Репозиторий для проверки существования полей
+     * @param string $entityTitle     Название сущности для сообщений об ошибках
      *
      * @return ImportError[]
      * @throws LoaderException
      */
-    public function validate(array $rows, ARepository $repository): array
+    public function validate(array $rows, ARepository $repository, string $entityTitle = ''): array
     {
+        $this->entityTitle = $entityTitle;
+
         $errors = [];
 
         $errors = array_merge($errors, $this->assertRowsNotEmpty($rows));
@@ -125,7 +130,7 @@ class FieldValidator
             $errors[] = new ImportError(
                 type: 'header',
                 code: 'NOT_FOUND',
-                message: 'В CRM не найдены поля: ' . implode(', ', $missing),
+                message: 'В CRM' . ($this->entityTitle ? ' (' . $this->entityTitle . ')' : '') . ' не найдены поля: ' . implode(', ', $missing),
                 context: ['missing_fields' => $missing]
             );
         }

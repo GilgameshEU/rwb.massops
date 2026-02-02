@@ -23,8 +23,11 @@ class XlsxTemplateExporter
      *
      * @param string[] $requiredCodes
      *        Список кодов обязательных полей
+     *
+     * @param string $filename
+     *        Имя файла для скачивания
      */
-    #[NoReturn] public static function export(array $fields, array $requiredCodes): void
+    #[NoReturn] public static function export(array $fields, array $requiredCodes, string $filename = 'import_template.xlsx'): void
     {
         $requiredMap = array_flip($requiredCodes);
 
@@ -49,7 +52,7 @@ class XlsxTemplateExporter
             $col++;
         }
 
-        self::output($spreadsheet, 'company_import_template.xlsx');
+        self::output($spreadsheet, $filename);
     }
 
     /**

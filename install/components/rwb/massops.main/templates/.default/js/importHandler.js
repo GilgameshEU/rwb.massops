@@ -9,38 +9,41 @@
          * Инициализирует обработчик импорта
          *
          * @param {HTMLElement} importBtn Кнопка импорта
-         * @param {HTMLElement} container Контейнер для отображения ошибок
+         * @param {Function} getEntityType Функция получения текущего типа сущности
          */
-        init: function (importBtn, container) {
-            importBtn.onclick = function () {
-                this.handleImport(importBtn, container);
-            }.bind(this);
+        init: function (importBtn, getEntityType) {
+            var self = this;
+            importBtn.addEventListener('click', function () {
+                self.handleImport(importBtn, getEntityType);
+            });
         },
 
         /**
          * Обрабатывает импорт данных
          *
-         * @param {HTMLElement} importBtn Кнопка импорта
-         * @param {HTMLElement} container Контейнер для отображения ошибок
+         * @param {HTMLElement} importBtn
+         * @param {Function} getEntityType
          */
-        handleImport: function (importBtn, container) {
-            const originalText = importBtn.textContent;
-            const dryRunCheckbox = BX('rwb-import-dry-run');
-            const isDryRun = dryRunCheckbox && dryRunCheckbox.checked;
+        handleImport: function (importBtn, getEntityType) {
+            var originalText = importBtn.textContent;
+            var dryRunToggle = BX('rwb-import-dry-run');
+            var isDryRun = dryRunToggle && dryRunToggle.checked;
 
-            // Показываем индикатор загрузки
-            const loadingText = isDryRun ? 'Dry Run...' : 'Импорт...';
+            var loadingText = isDryRun ? 'Проверка...' : 'Импорт...';
             this.setLoading(importBtn, true, loadingText);
 
-            const action = isDryRun ? 'dryRunImport' : 'importCompanies';
+            var action = isDryRun ? 'runDryRun' : 'runImport';
+            var entityType = getEntityType();
+
+            var container = document.getElementById('rwb-results-container');
 
             BX.ajax.runComponentAction('rwb:massops.main', action, {
-                mode: 'class'
+                mode: 'class',
+                data: {entityType: entityType}
             }).then(function (response) {
                 this.setLoading(importBtn, false, originalText);
 
-                // Собираем все ошибки в один массив для отображения
-                const allErrors = [];
+                var allErrors = [];
                 if (response.data && response.data.errors && Object.keys(response.data.errors).length > 0) {
                     Object.keys(response.data.errors).forEach(function (rowIndex) {
                         response.data.errors[rowIndex].forEach(function (error) {
@@ -49,11 +52,10 @@
                     });
                 }
 
-                const addedCount = response.data.added || response.data.wouldBeAdded || 0;
-                const gridErrors = response.data.errors || {};
-                const successRows = response.data.wouldBeAddedDetails || response.data.addedDetails || {};
+                var addedCount = response.data.added || response.data.wouldBeAdded || 0;
+                var gridErrors = response.data.errors || {};
+                var successRows = response.data.wouldBeAddedDetails || response.data.addedDetails || {};
 
-                // Показываем компактные результаты
                 window.RwbImportErrorHandler.showImportErrors(
                     allErrors,
                     gridErrors,
@@ -62,16 +64,18 @@
                     isDryRun
                 );
 
-                // Подсветка строк грида
                 if (window.RwbGridHighlighter) {
                     window.RwbGridHighlighter.highlight(gridErrors, successRows);
                     window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
                 }
 
+                // Обновляем текст кнопки в зависимости от режима
+                this._updateButtonText(importBtn);
+
             }.bind(this)).catch(function (error) {
                 this.setLoading(importBtn, false, originalText);
 
-                const errors = window.RwbImportErrorHandler.parseBitrixError(error);
+                var errors = window.RwbImportErrorHandler.parseBitrixError(error);
                 if (errors.length === 0) {
                     errors.push({message: 'Произошла ошибка при импорте'});
                 }
@@ -81,11 +85,22 @@
         },
 
         /**
+         * Обновляет текст кнопки по состоянию toggle
+         *
+         * @param {HTMLElement} btn
+         */
+        _updateButtonText: function (btn) {
+            var dryRunToggle = BX('rwb-import-dry-run');
+            var isDryRun = dryRunToggle && dryRunToggle.checked;
+            btn.textContent = isDryRun ? 'Проверить' : 'Импортировать';
+        },
+
+        /**
          * Устанавливает состояние загрузки для кнопки
          *
-         * @param {HTMLElement} button Кнопка
-         * @param {boolean} isLoading Состояние загрузки
-         * @param {string} text Текст кнопки
+         * @param {HTMLElement} button
+         * @param {boolean} isLoading
+         * @param {string} text
          */
         setLoading: function (button, isLoading, text) {
             button.disabled = isLoading;

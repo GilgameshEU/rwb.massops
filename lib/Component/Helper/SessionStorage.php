@@ -11,19 +11,24 @@ class SessionStorage
      *
      * @param array $columns Колонки грида
      * @param array $rows Строки грида
+     * @param string|null $entityType Тип CRM-сущности (company, contact, deal)
      */
-    public static function save(array $columns, array $rows): void
+    public static function save(array $columns, array $rows, ?string $entityType = null): void
     {
         $_SESSION[self::SESSION_KEY] = [
             'COLUMNS' => $columns,
             'ROWS' => $rows,
         ];
+
+        if ($entityType !== null) {
+            $_SESSION[self::SESSION_KEY]['ENTITY_TYPE'] = $entityType;
+        }
     }
 
     /**
      * Получает данные из сессии
      *
-     * @return array{COLUMNS: array, ROWS: array}|null
+     * @return array{COLUMNS: array, ROWS: array, ENTITY_TYPE: string|null}|null
      */
     public static function get(): ?array
     {
@@ -48,6 +53,26 @@ class SessionStorage
     public static function getRows(): array
     {
         return $_SESSION[self::SESSION_KEY]['ROWS'] ?? [];
+    }
+
+    /**
+     * Сохраняет тип CRM-сущности
+     *
+     * @param string $entityType
+     */
+    public static function saveEntityType(string $entityType): void
+    {
+        $_SESSION[self::SESSION_KEY]['ENTITY_TYPE'] = $entityType;
+    }
+
+    /**
+     * Получает тип CRM-сущности из сессии
+     *
+     * @return string|null
+     */
+    public static function getEntityType(): ?string
+    {
+        return $_SESSION[self::SESSION_KEY]['ENTITY_TYPE'] ?? null;
     }
 
     /**

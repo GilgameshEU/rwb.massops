@@ -1,7 +1,7 @@
 /**
  * Модуль для обработки загрузки файла
  */
-(function() {
+(function () {
     'use strict';
 
     window.RwbImportUploadHandler = {
@@ -9,75 +9,79 @@
          * Инициализирует обработчик загрузки файла
          *
          * @param {HTMLElement} uploadBtn Кнопка загрузки
-         * @param {HTMLElement} fileInput Поле выбора файла
-         * @param {HTMLElement} container Контейнер для отображения ошибок
+         * @param {Function} getEntityType Функция получения текущего типа сущности
+         * @param {Function} onSuccess Callback при успешной загрузке
          */
-        init: function(uploadBtn, fileInput, container) {
-            uploadBtn.onclick = function() {
-                this.handleUpload(uploadBtn, fileInput, container);
-            }.bind(this);
+        init: function (uploadBtn, getEntityType, onSuccess) {
+            var self = this;
+            uploadBtn.addEventListener('click', function () {
+                self.handleUpload(uploadBtn, getEntityType, onSuccess);
+            });
         },
 
         /**
          * Обрабатывает загрузку файла
          *
-         * @param {HTMLElement} uploadBtn Кнопка загрузки
-         * @param {HTMLElement} fileInput Поле выбора файла
-         * @param {HTMLElement} container Контейнер для отображения ошибок
+         * @param {HTMLElement} uploadBtn
+         * @param {Function} getEntityType
+         * @param {Function} onSuccess
          */
-        handleUpload: function(uploadBtn, fileInput, container) {
-            if (!fileInput.files.length) {
-                alert('Выберите файл');
+        handleUpload: function (uploadBtn, getEntityType, onSuccess) {
+            var file = window.RwbDropzoneHandler.getFile();
+            if (!file) {
                 return;
             }
 
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            var entityType = getEntityType();
+            if (!entityType) {
+                return;
+            }
 
-            // Показываем индикатор загрузки
+            var formData = new FormData();
+            formData.append('file', file);
+            formData.append('entityType', entityType);
+
             this.setLoading(uploadBtn, true, 'Загрузка...');
+
+            var errContainer = document.getElementById('rwb-upload-errors-container');
 
             BX.ajax.runComponentAction('rwb:massops.main', 'uploadFile', {
                 mode: 'class',
                 data: formData
-            }).then(function(response) {
-                this.setLoading(uploadBtn, false, 'Загрузить файл');
+            }).then(function (response) {
+                this.setLoading(uploadBtn, false, 'Загрузить');
 
-                // Проверяем наличие ошибок
                 if (response.data && response.data.success === false && response.data.errors) {
                     window.RwbImportErrorHandler.showUploadErrors(
                         response.data.errors,
-                        container
+                        errContainer
                     );
                     return;
                 }
 
-                // Если всё успешно - перезагружаем страницу
-                if (response.data && response.data.total !== undefined) {
-                    location.reload();
-                } else {
-                    location.reload();
+                if (onSuccess) {
+                    onSuccess(response.data);
                 }
-            }.bind(this)).catch(function(error) {
-                this.setLoading(uploadBtn, false, 'Загрузить файл');
+            }.bind(this)).catch(function (error) {
+                this.setLoading(uploadBtn, false, 'Загрузить');
 
-                const errors = window.RwbImportErrorHandler.parseBitrixError(error);
-                if (errors.length > 0) {
+                var errors = window.RwbImportErrorHandler.parseBitrixError(error);
+                if (errors.length === 0) {
                     errors.push({message: 'Произошла ошибка при загрузке файла'});
                 }
 
-                window.RwbImportErrorHandler.showUploadErrors(errors, container);
+                window.RwbImportErrorHandler.showUploadErrors(errors, errContainer);
             }.bind(this));
         },
 
         /**
          * Устанавливает состояние загрузки для кнопки
          *
-         * @param {HTMLElement} button Кнопка
-         * @param {boolean} isLoading Состояние загрузки
-         * @param {string} text Текст кнопки
+         * @param {HTMLElement} button
+         * @param {boolean} isLoading
+         * @param {string} text
          */
-        setLoading: function(button, isLoading, text) {
+        setLoading: function (button, isLoading, text) {
             button.disabled = isLoading;
             button.textContent = text;
         }

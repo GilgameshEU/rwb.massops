@@ -44,7 +44,6 @@
             var errorRowCount = Object.keys(errorsByRow).length;
             var totalRows = successCount + errorRowCount;
 
-            // Модификатор цвета по результату
             var modifier;
             if (errorRowCount === 0) {
                 modifier = 'success';
@@ -59,7 +58,6 @@
             var title = isDryRun ? 'Результаты Dry Run' : 'Результаты импорта';
             block.appendChild(this.createTitle(title, block));
 
-            // Компактная статистика
             var successLabel = isDryRun ? 'Готово к добавлению' : 'Успешно';
             var statsText = 'Всего: ' + totalRows
                 + '  |  ' + successLabel + ': ' + successCount
@@ -76,7 +74,6 @@
 
             block.appendChild(statsEl);
 
-            // Сводка по типам ошибок
             if (allErrors.length > 0) {
                 var summary = this.buildErrorSummary(allErrors);
                 if (summary.length > 0) {
@@ -119,13 +116,6 @@
 
         // --- Вспомогательные методы ---
 
-        /**
-         * Создаёт блок-обёртку с CSS-модификатором
-         *
-         * @param {string} id       ID блока
-         * @param {string} modifier Модификатор цвета (warning|success|error|info)
-         * @returns {HTMLElement}
-         */
         createBlock: function (id, modifier) {
             return BX.create('div', {
                 props: {
@@ -135,13 +125,6 @@
             });
         },
 
-        /**
-         * Создаёт заголовок с кнопкой закрытия
-         *
-         * @param {string} text  Текст заголовка
-         * @param {HTMLElement} block Блок для удаления
-         * @returns {HTMLElement}
-         */
         createTitle: function (text, block) {
             var header = BX.create('div', {
                 props: {className: 'rwb-result-header'}
@@ -165,12 +148,6 @@
             return header;
         },
 
-        /**
-         * Создаёт список <ul>
-         *
-         * @param {string[]} items
-         * @returns {HTMLElement}
-         */
         createList: function (items) {
             var ul = BX.create('ul', {
                 props: {className: 'rwb-result-list'}
@@ -185,11 +162,6 @@
             return ul;
         },
 
-        /**
-         * Удаляет блок по ID
-         *
-         * @param {string} id
-         */
         removeBlock: function (id) {
             var el = BX(id);
             if (el) {
@@ -197,12 +169,6 @@
             }
         },
 
-        /**
-         * Парсит ошибки из Bitrix AJAX
-         *
-         * @param {Object} error
-         * @returns {Array}
-         */
         parseBitrixError: function (error) {
             var errors = [];
 

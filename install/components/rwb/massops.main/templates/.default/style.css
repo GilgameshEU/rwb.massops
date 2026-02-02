@@ -1,3 +1,479 @@
+/* ===== Корневой layout ===== */
+
+.rwb-massops,
+.rwb-massops *,
+.rwb-massops *::before,
+.rwb-massops *::after {
+    box-sizing: border-box;
+}
+
+.rwb-massops {
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ===== Табы навигации ===== */
+
+.rwb-massops__tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #e8e8ec;
+    margin-bottom: 24px;
+    padding: 0 20px;
+}
+
+.rwb-massops__tab {
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #8b8fa1;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.2s, border-color 0.2s;
+    user-select: none;
+}
+
+.rwb-massops__tab:hover {
+    color: #525672;
+}
+
+.rwb-massops__tab--active {
+    color: #3F51B5;
+    border-bottom-color: #3F51B5;
+}
+
+.rwb-massops__tab--disabled {
+    color: #c5c7d0;
+    cursor: default;
+    pointer-events: none;
+}
+
+.rwb-massops__tab-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    background: #c5c7d0;
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin-left: 8px;
+    vertical-align: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ===== Контент табов ===== */
+
+.rwb-massops__content {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0 20px 20px;
+}
+
+.rwb-massops__tab-content {
+    display: none;
+}
+
+.rwb-massops__tab-content--active {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+/* ===== Wizard (степпер) ===== */
+
+.rwb-wizard {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.rwb-wizard__stepper {
+    display: flex;
+    align-items: center;
+    margin-bottom: 32px;
+    padding: 0;
+}
+
+.rwb-wizard__step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    position: relative;
+}
+
+.rwb-wizard__step:not(:last-child)::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: #e8e8ec;
+    margin: 0 16px;
+    transition: background 0.3s;
+}
+
+.rwb-wizard__step--completed:not(:last-child)::after {
+    background: #3F51B5;
+}
+
+.rwb-wizard__step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #e8e8ec;
+    color: #8b8fa1;
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+    transition: background 0.3s, color 0.3s;
+}
+
+.rwb-wizard__step--active .rwb-wizard__step-number {
+    background: #3F51B5;
+    color: #fff;
+}
+
+.rwb-wizard__step--completed .rwb-wizard__step-number {
+    background: #3F51B5;
+    color: #fff;
+}
+
+.rwb-wizard__step-label {
+    font-size: 13px;
+    color: #8b8fa1;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: color 0.3s;
+}
+
+.rwb-wizard__step--active .rwb-wizard__step-label {
+    color: #333;
+    font-weight: 600;
+}
+
+.rwb-wizard__step--completed .rwb-wizard__step-label {
+    color: #3F51B5;
+}
+
+/* ===== Панели wizard ===== */
+
+.rwb-wizard__panel {
+    display: none;
+    animation: rwb-fadeIn 0.25s ease;
+}
+
+.rwb-wizard__panel--active {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+@keyframes rwb-fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== Кнопки wizard ===== */
+
+.rwb-wizard__actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #f0f0f3;
+}
+
+/* ===== Карточки сущностей ===== */
+
+.rwb-entity-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.rwb-entity-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 28px 20px;
+    border: 2px solid #e8e8ec;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    background: #fff;
+    user-select: none;
+}
+
+.rwb-entity-card:hover {
+    border-color: #b0b5d4;
+    box-shadow: 0 2px 8px rgba(63, 81, 181, 0.08);
+    transform: translateY(-2px);
+}
+
+.rwb-entity-card--selected {
+    border-color: #3F51B5;
+    box-shadow: 0 2px 12px rgba(63, 81, 181, 0.15);
+    background: #f5f6ff;
+}
+
+.rwb-entity-card__icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: #f0f0f3;
+    transition: background 0.2s;
+}
+
+.rwb-entity-card--selected .rwb-entity-card__icon {
+    background: #e8eaff;
+}
+
+.rwb-entity-card__icon svg {
+    width: 24px;
+    height: 24px;
+    fill: #8b8fa1;
+    transition: fill 0.2s;
+}
+
+.rwb-entity-card--selected .rwb-entity-card__icon svg {
+    fill: #3F51B5;
+}
+
+.rwb-entity-card__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #525672;
+}
+
+.rwb-entity-card--selected .rwb-entity-card__title {
+    color: #3F51B5;
+}
+
+/* ===== Dropzone ===== */
+
+.rwb-dropzone {
+    border: 2px dashed #d0d2db;
+    border-radius: 12px;
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: #fafafa;
+}
+
+.rwb-dropzone:hover,
+.rwb-dropzone--dragover {
+    border-color: #3F51B5;
+    background: #f5f6ff;
+}
+
+.rwb-dropzone--has-file {
+    border-color: #4caf50;
+    background: #f6fef6;
+    border-style: solid;
+}
+
+.rwb-dropzone__icon {
+    margin-bottom: 12px;
+}
+
+.rwb-dropzone__icon svg {
+    width: 40px;
+    height: 40px;
+    fill: #b0b5d4;
+}
+
+.rwb-dropzone--has-file .rwb-dropzone__icon svg {
+    fill: #4caf50;
+}
+
+.rwb-dropzone__text {
+    font-size: 14px;
+    color: #525672;
+    margin-bottom: 8px;
+}
+
+.rwb-dropzone__text strong {
+    color: #3F51B5;
+}
+
+.rwb-dropzone__formats {
+    font-size: 12px;
+    color: #8b8fa1;
+}
+
+.rwb-dropzone__file-info {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: #333;
+    font-weight: 500;
+}
+
+.rwb-dropzone--has-file .rwb-dropzone__file-info {
+    display: flex;
+    justify-content: center;
+}
+
+.rwb-dropzone__file-remove {
+    color: #e53935;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    font-weight: bold;
+    margin-left: 4px;
+}
+
+.rwb-dropzone__template-link {
+    display: inline-block;
+    width: fit-content;
+    margin-top: 16px;
+    font-size: 13px;
+    color: #3F51B5;
+    cursor: pointer;
+    text-decoration: none;
+    border-bottom: 1px dashed #3F51B5;
+}
+
+.rwb-dropzone__template-link:hover {
+    color: #283593;
+    border-color: #283593;
+}
+
+/* ===== Preview toolbar ===== */
+
+.rwb-preview {
+    flex: 1;
+}
+
+.rwb-preview__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 16px 20px;
+    background: #f8f8fb;
+    border-radius: 8px;
+    border: 1px solid #e8e8ec;
+}
+
+.rwb-preview__info {
+    font-size: 13px;
+    color: #525672;
+    margin-right: auto;
+}
+
+.rwb-preview__info strong {
+    color: #333;
+}
+
+/* ===== Toggle (dry-run) ===== */
+
+.rwb-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.rwb-toggle__input {
+    display: none;
+}
+
+.rwb-toggle__track {
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    background: #c5c7d0;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.rwb-toggle__input:checked + .rwb-toggle__track {
+    background: #3F51B5;
+}
+
+.rwb-toggle__track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.rwb-toggle__input:checked + .rwb-toggle__track::after {
+    transform: translateX(18px);
+}
+
+.rwb-toggle__label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #525672;
+}
+
+/* ===== Placeholder (скоро) ===== */
+
+.rwb-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 32px;
+    text-align: center;
+    flex: 1;
+}
+
+.rwb-placeholder__icon {
+    margin-bottom: 16px;
+}
+
+.rwb-placeholder__icon svg {
+    width: 64px;
+    height: 64px;
+    fill: #d0d2db;
+}
+
+.rwb-placeholder__title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #525672;
+    margin-bottom: 8px;
+}
+
+.rwb-placeholder__text {
+    font-size: 14px;
+    color: #8b8fa1;
+}
+
+/* ===== Results container ===== */
+
+#rwb-results-container {
+    margin-bottom: 16px;
+}
+
 /* ===== Грид: подсветка строк ===== */
 
 .rwb-grid-row-error > td {
@@ -17,10 +493,9 @@
     margin-top: 15px;
     margin-bottom: 15px;
     padding: 15px;
-    border-radius: 4px;
+    border-radius: 8px;
 }
 
-/* Модификаторы цвета блока */
 .rwb-result-block--warning {
     background-color: #ffeaa7;
     border: 1px solid #fdcb6e;
@@ -45,7 +520,6 @@
     color: #1e40af;
 }
 
-/* Заголовок блока */
 .rwb-result-header {
     display: flex;
     justify-content: space-between;
@@ -66,12 +540,10 @@
     padding: 0 5px;
 }
 
-/* Статистика */
 .rwb-result-stats {
     font-size: 14px;
 }
 
-/* Сводка ошибок */
 .rwb-result-summary-title {
     font-weight: bold;
     margin-top: 10px;
@@ -87,4 +559,11 @@
 .rwb-result-list li {
     margin-bottom: 3px;
     font-size: 13px;
+}
+
+/* ===== Утилиты кнопок ===== */
+
+.ui-btn[disabled] {
+    opacity: 0.5;
+    pointer-events: none;
 }

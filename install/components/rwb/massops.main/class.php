@@ -15,19 +15,46 @@ use Rwb\Massops\Component\Helper\GridDataConverter;
 use Rwb\Massops\Component\Helper\SessionStorage;
 use Rwb\Massops\Component\Helper\XlsxTemplateExporter;
 use Rwb\Massops\Import\FieldValidator;
+use Rwb\Massops\Import\Service\AImport;
 use Rwb\Massops\Import\Service\CompanyImport;
+use Rwb\Massops\Import\Service\ContactImport;
+use Rwb\Massops\Import\Service\DealImport;
+use Rwb\Massops\Repository\CRM\ARepository;
 use Rwb\Massops\Repository\CRM\Company;
+use Rwb\Massops\Repository\CRM\Contact;
+use Rwb\Massops\Repository\CRM\Deal;
 
 /**
- * Основной компонент массового импорта компаний
+ * Основной компонент массовых операций CRM
  */
 class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 {
-    private CompanyImport $importService;
-    private Company $companyRepository;
+    /**
+     * Реестр поддерживаемых CRM-сущностей
+     */
+    private const ENTITY_MAP = [
+        'company' => [
+            'title' => 'Компании',
+            'icon' => 'building',
+            'repository' => Company::class,
+            'import' => CompanyImport::class,
+        ],
+        'contact' => [
+            'title' => 'Контакты',
+            'icon' => 'person',
+            'repository' => Contact::class,
+            'import' => ContactImport::class,
+        ],
+        'deal' => [
+            'title' => 'Сделки',
+            'icon' => 'handshake',
+            'repository' => Deal::class,
+            'import' => DealImport::class,
+        ],
+    ];
 
     /**
-     * Подготавливает параметры компонента и инициализирует сервисы
+     * Подготавливает параметры компонента
      *
      * @param array $arParams
      *
@@ -39,11 +66,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         if (!Loader::includeModule('rwb.massops')) {
             throw new RuntimeException('Module rwb.massops not loaded');
         }
-
-        $this->companyRepository = new Company();
-        $this->importService = new CompanyImport(
-            $this->companyRepository
-        );
 
         return parent::onPrepareComponentParams($arParams);
     }
@@ -58,15 +80,17 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         return [
             'uploadFile' => ['prefilters' => []],
             'downloadXlsxTemplate' => ['prefilters' => []],
+            'runImport' => ['prefilters' => []],
+            'runDryRun' => ['prefilters' => []],
+            'clear' => ['prefilters' => []],
+            // Обратная совместимость
             'importCompanies' => ['prefilters' => []],
             'dryRunImport' => ['prefilters' => []],
-            'clear' => ['prefilters' => []],
         ];
     }
 
     /**
      * Основной метод выполнения компонента
-     *
      */
     public function executeComponent(): void
     {
@@ -76,6 +100,17 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             return;
         }
 
+        $entityTypes = [];
+        foreach (self::ENTITY_MAP as $key => $config) {
+            $entityTypes[$key] = [
+                'title' => $config['title'],
+                'icon' => $config['icon'],
+            ];
+        }
+
+        $this->arResult['ENTITY_TYPES'] = $entityTypes;
+        $this->arResult['CURRENT_ENTITY_TYPE'] = SessionStorage::getEntityType();
+        $this->arResult['HAS_DATA'] = SessionStorage::hasData();
         $this->arResult['GRID_COLUMNS'] = SessionStorage::getColumns();
         $this->arResult['GRID_ROWS'] = SessionStorage::getRows();
 
@@ -83,10 +118,77 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
     }
 
     /**
+     * Создает репозиторий для указанного типа сущности
+     *
+     * @param string $entityType
+     *
+     * @return ARepository
+     */
+    private function createRepository(string $entityType): ARepository
+    {
+        $config = $this->getEntityConfig($entityType);
+        $repoClass = $config['repository'];
+
+        return new $repoClass();
+    }
+
+    /**
+     * Создает import-сервис для указанного типа сущности
+     *
+     * @param string $entityType
+     *
+     * @return AImport
+     */
+    private function createImportService(string $entityType): AImport
+    {
+        $config = $this->getEntityConfig($entityType);
+        $importClass = $config['import'];
+        $repository = $this->createRepository($entityType);
+
+        return new $importClass($repository);
+    }
+
+    /**
+     * Получает конфигурацию сущности по ключу
+     *
+     * @param string $entityType
+     *
+     * @return array
+     */
+    private function getEntityConfig(string $entityType): array
+    {
+        if (!isset(self::ENTITY_MAP[$entityType])) {
+            throw new RuntimeException(
+                'Неизвестный тип сущности: ' . $entityType
+            );
+        }
+
+        return self::ENTITY_MAP[$entityType];
+    }
+
+    /**
+     * Определяет тип сущности из запроса или сессии
+     *
+     * @return string
+     */
+    private function resolveEntityType(): string
+    {
+        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
+        $entityType = $request->getPost('entityType')
+            ?? $request->get('entityType')
+            ?? SessionStorage::getEntityType();
+
+        if (!$entityType || !isset(self::ENTITY_MAP[$entityType])) {
+            throw new RuntimeException('Тип сущности не указан');
+        }
+
+        return $entityType;
+    }
+
+    /**
      * Загружает и парсит файл импорта
      *
      * @return array
-     * @throws LoaderException
      * @throws AccessDeniedException
      */
     public function uploadFileAction(): array
@@ -95,13 +197,17 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             throw new AccessDeniedException();
         }
 
+        $entityType = $this->resolveEntityType();
+        $importService = $this->createImportService($entityType);
+        $repository = $this->createRepository($entityType);
+
         $file = $_FILES['file'] ?? null;
         if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
             throw new RuntimeException('Файл не загружен');
         }
 
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        $parseResult = $this->importService->parseFile(
+        $parseResult = $importService->parseFile(
             $file['tmp_name'],
             $ext
         );
@@ -118,10 +224,12 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
         $rows = $parseResult['data'];
 
+        $entityConfig = $this->getEntityConfig($entityType);
         $validator = new FieldValidator();
         $validationErrors = $validator->validate(
             $rows,
-            $this->companyRepository
+            $repository,
+            $entityConfig['title']
         );
 
         if (!empty($validationErrors)) {
@@ -142,7 +250,8 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
         SessionStorage::save(
             $gridData['columns'],
-            $gridData['rows']
+            $gridData['rows'],
+            $entityType
         );
 
         return [
@@ -153,12 +262,14 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
     /**
      * Возвращает маппинг кодов полей CRM на ID колонок грида
      *
-     * @return array<string, string> ['TITLE' => 'COL_0', 'PHONE' => 'COL_1', ...]
-     * @throws LoaderException
+     * @param string $entityType
+     *
+     * @return array<string, string>
      */
-    private function getFieldToColumnMapping(): array
+    private function getFieldToColumnMapping(string $entityType): array
     {
-        $fieldCodes = array_keys($this->companyRepository->getFieldList());
+        $repository = $this->createRepository($entityType);
+        $fieldCodes = array_keys($repository->getFieldList());
         $mapping = [];
 
         foreach ($fieldCodes as $index => $code) {
@@ -169,12 +280,12 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
     }
 
     /**
-     * Выполняет импорт компаний из сохранённых данных
+     * Выполняет импорт из сохранённых данных
      *
      * @return array
      * @throws AccessDeniedException|InvalidOperationException|LoaderException
      */
-    public function importCompaniesAction(): array
+    public function runImportAction(): array
     {
         if (!CurrentUser::get()->isAdmin()) {
             throw new AccessDeniedException();
@@ -184,8 +295,11 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             throw new RuntimeException('Нет данных для импорта');
         }
 
+        $entityType = $this->resolveEntityType();
+        $importService = $this->createImportService($entityType);
+
         try {
-            $result = $this->importService->import(
+            $result = $importService->import(
                 SessionStorage::getRows()
             );
         } catch (ArgumentException|LoaderException $e) {
@@ -211,17 +325,17 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'added' => $result['success'],
             'errors' => $gridErrors,
             'addedDetails' => $addedDetails,
-            'fieldToColumn' => $this->getFieldToColumnMapping(),
+            'fieldToColumn' => $this->getFieldToColumnMapping($entityType),
         ];
     }
 
     /**
-     * Выполняет dry run импорта компаний (симуляция без сохранения)
+     * Выполняет dry run импорта (симуляция без сохранения)
      *
      * @return array
      * @throws AccessDeniedException|InvalidOperationException|LoaderException
      */
-    public function dryRunImportAction(): array
+    public function runDryRunAction(): array
     {
         if (!CurrentUser::get()->isAdmin()) {
             throw new AccessDeniedException();
@@ -231,8 +345,11 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             throw new RuntimeException('Нет данных для импорта');
         }
 
+        $entityType = $this->resolveEntityType();
+        $importService = $this->createImportService($entityType);
+
         try {
-            $result = $this->importService->dryRun(
+            $result = $importService->dryRun(
                 SessionStorage::getRows()
             );
         } catch (ArgumentException|LoaderException $e) {
@@ -256,8 +373,32 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'wouldBeAdded' => $result['success'],
             'errors' => $gridErrors,
             'wouldBeAddedDetails' => $wouldBeAdded,
-            'fieldToColumn' => $this->getFieldToColumnMapping(),
+            'fieldToColumn' => $this->getFieldToColumnMapping($entityType),
         ];
+    }
+
+    /**
+     * Обратная совместимость: импорт компаний
+     *
+     * @return array
+     */
+    public function importCompaniesAction(): array
+    {
+        SessionStorage::saveEntityType('company');
+
+        return $this->runImportAction();
+    }
+
+    /**
+     * Обратная совместимость: dry run
+     *
+     * @return array
+     */
+    public function dryRunImportAction(): array
+    {
+        SessionStorage::saveEntityType('company');
+
+        return $this->runDryRunAction();
     }
 
     /**
@@ -273,42 +414,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
     }
 
     /**
-     * Скачивает CSV-шаблон для импорта компаний
-     *
-     * @throws AccessDeniedException|LoaderException
-     */
-    public function downloadCsvTemplateAction(): void
-    {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
-
-        global $APPLICATION;
-        $APPLICATION->restartBuffer();
-
-        $fields = $this->companyRepository->getFieldList();
-
-        header('Content-Type: text/csv; charset=windows-1251');
-        header('Content-Disposition: attachment; filename="company_import_template.csv"');
-        header('Pragma: public');
-        header('Cache-Control: max-age=0');
-
-        $output = fopen('php://output', 'w');
-
-        // ❗ BOM НЕ нужен для CP1251
-        $row = array_map(
-            static fn($value) => iconv('UTF-8', 'Windows-1251//TRANSLIT', $value),
-            array_values($fields)
-        );
-
-        fputcsv($output, $row, ';');
-        fclose($output);
-
-        die();
-    }
-
-    /**
-     * Скачивает XLSX-шаблон для импорта компаний
+     * Скачивает XLSX-шаблон для импорта
      *
      * @throws AccessDeniedException
      * @throws LoaderException
@@ -319,9 +425,15 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             throw new AccessDeniedException();
         }
 
+        $entityType = $this->resolveEntityType();
+        $repository = $this->createRepository($entityType);
+
+        $filename = $entityType . '_import_template.xlsx';
+
         XlsxTemplateExporter::export(
-            $this->companyRepository->getFieldList(),
-            $this->companyRepository->getRequiredFieldCodes()
+            $repository->getFieldList(),
+            $repository->getRequiredFieldCodes(),
+            $filename
         );
     }
 }
