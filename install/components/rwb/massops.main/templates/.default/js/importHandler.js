@@ -50,17 +50,23 @@
                 }
 
                 const addedCount = response.data.added || response.data.wouldBeAdded || 0;
-                const wouldBeAddedDetails = response.data.wouldBeAddedDetails || response.data.addedDetails || {};
+                const gridErrors = response.data.errors || {};
+                const successRows = response.data.wouldBeAddedDetails || response.data.addedDetails || {};
 
-                // Всегда показываем результаты в окне ошибок (включая успешные добавления)
+                // Показываем компактные результаты
                 window.RwbImportErrorHandler.showImportErrors(
                     allErrors,
-                    response.data.errors || {},
+                    gridErrors,
                     addedCount,
                     container,
-                    isDryRun,
-                    wouldBeAddedDetails
+                    isDryRun
                 );
+
+                // Подсветка строк грида
+                if (window.RwbGridHighlighter) {
+                    window.RwbGridHighlighter.highlight(gridErrors, successRows);
+                    window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
+                }
 
             }.bind(this)).catch(function (error) {
                 this.setLoading(importBtn, false, originalText);

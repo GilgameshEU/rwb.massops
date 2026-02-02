@@ -1,7 +1,7 @@
 /**
- * Модуль для обработки и отображения ошибок импорта
+ * Модуль для обработки и отображения результатов импорта
  */
-(function() {
+(function () {
     'use strict';
 
     window.RwbImportErrorHandler = {
@@ -11,329 +11,204 @@
          * @param {Array} errors Массив ошибок
          * @param {HTMLElement} container Контейнер для вставки блока ошибок
          */
-        showUploadErrors: function(errors, container) {
-            this.showErrors(
-                errors,
-                container,
-                'rwb-upload-errors',
-                'Ошибки при загрузке файла:'
-            );
+        showUploadErrors: function (errors, container) {
+            this.removeBlock('rwb-upload-errors');
+
+            var block = this.createBlock('rwb-upload-errors', 'warning');
+
+            block.appendChild(this.createTitle('Ошибки при загрузке файла:', block));
+
+            var list = this.createList(errors.map(function (e) {
+                return typeof e === 'string' ? e : (e.message || JSON.stringify(e));
+            }));
+            block.appendChild(list);
+
+            container.appendChild(block);
+            block.scrollIntoView({behavior: 'smooth', block: 'nearest'});
         },
 
         /**
-         * Отображает ошибки импорта
+         * Отображает результаты импорта в компактном формате
          *
-         * @param {Array} errors Массив ошибок
-         * @param {Object} errorsByRow Ошибки по строкам
-         * @param {number} addedCount Количество успешно добавленных записей
-         * @param {HTMLElement} container Контейнер для вставки блока ошибок
-         * @param {boolean} isDryRun Флаг режима dry run
-         * @param {Object} wouldBeAddedDetails Детали записей, которые были бы добавлены (для dry run)
+         * @param {Array} allErrors Плоский массив всех ошибок
+         * @param {Object} errorsByRow Ошибки по строкам {rowIdx: [errors]}
+         * @param {number} successCount Количество успешных записей
+         * @param {HTMLElement} container Контейнер
+         * @param {boolean} isDryRun Флаг dry run
          */
-        showImportErrors: function(errors, errorsByRow, addedCount, container, isDryRun, wouldBeAddedDetails) {
+        showImportErrors: function (allErrors, errorsByRow, successCount, container, isDryRun) {
             isDryRun = isDryRun || false;
-            wouldBeAddedDetails = wouldBeAddedDetails || {};
 
-            let titleText = isDryRun ? 'Результаты Dry Run (тестовый режим)' : 'Результаты импорта';
-            
-            // Добавляем информацию о количестве добавленных/готовых к добавлению
-            if (addedCount > 0) {
-                if (isDryRun) {
-                    titleText += ' (Будет добавлено компаний: ' + addedCount + ')';
-                } else {
-                    titleText += ' (Добавлено компаний: ' + addedCount + ')';
-                }
-            }
+            this.removeBlock('rwb-import-errors');
 
-            // Определяем цвет блока в зависимости от режима
-            const blockStyle = isDryRun ? {
-                backgroundColor: '#dbeafe',
-                border: '1px solid #93c5fd',
-                color: '#1e40af'
-            } : {
-                backgroundColor: '#ffeaa7',
-                border: '1px solid #fdcb6e',
-                color: '#2d3436'
-            };
+            var errorRowCount = Object.keys(errorsByRow).length;
+            var totalRows = successCount + errorRowCount;
 
-            this.showErrors(
-                errors,
-                container,
-                'rwb-import-errors',
-                titleText,
-                { maxHeight: '300px', overflowY: 'auto' },
-                blockStyle,
-                isDryRun,
-                wouldBeAddedDetails,
-                addedCount
-            );
-
-            // Сохраняем ошибки для возможного подсвечивания строк в гриде
-            if (Object.keys(errorsByRow).length > 0) {
-                window.rwbImportErrors = errorsByRow;
-            }
-        },
-
-        /**
-         * Общий метод для отображения ошибок
-         *
-         * @param {Array} errors Массив ошибок
-         * @param {HTMLElement} container Контейнер для вставки
-         * @param {string} errorBlockId ID блока ошибок
-         * @param {string} title Заголовок блока ошибок
-         * @param {Object} listStyles Дополнительные стили для списка ошибок
-         * @param {Object} blockStyle Стили для блока ошибок
-         * @param {boolean} isDryRun Флаг режима dry run
-         * @param {Object} wouldBeAddedDetails Детали записей, которые были бы добавлены
-         * @param {number} addedCount Количество успешно добавленных записей
-         */
-        showErrors: function(errors, container, errorBlockId, title, listStyles, blockStyle, isDryRun, wouldBeAddedDetails, addedCount) {
-            // Удаляем предыдущие ошибки, если есть
-            const existingErrorBlock = BX(errorBlockId);
-            if (existingErrorBlock) {
-                existingErrorBlock.remove();
-            }
-
-            // Определяем стили блока
-            const defaultBlockStyle = {
-                marginTop: '15px',
-                marginBottom: '15px',
-                padding: '15px',
-                backgroundColor: '#ffeaa7',
-                border: '1px solid #fdcb6e',
-                borderRadius: '4px',
-                color: '#2d3436'
-            };
-
-            const finalBlockStyle = blockStyle ? Object.assign({}, defaultBlockStyle, blockStyle) : defaultBlockStyle;
-
-            // Создаем блок для отображения ошибок
-            const errorBlock = BX.create('div', {
-                props: {
-                    id: errorBlockId,
-                    className: 'rwb-import-errors'
-                },
-                style: finalBlockStyle
-            });
-
-            // Заголовок с кнопкой закрытия
-            const errorTitleContainer = this.createErrorTitle(title, errorBlock);
-
-            // Список ошибок
-            const errorList = this.createErrorList(errors, listStyles || {});
-
-            errorBlock.appendChild(errorTitleContainer);
-            errorBlock.appendChild(errorList);
-
-            // Добавляем информацию о успешных добавлениях
-            if (addedCount > 0) {
-                const successSection = this.createSuccessSection(addedCount, isDryRun, wouldBeAddedDetails);
-                errorBlock.appendChild(successSection);
-            }
-
-            // Вставляем блок ошибок в контейнер
-            container.appendChild(errorBlock);
-
-            // Прокручиваем к блоку ошибок
-            errorBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        },
-
-        /**
-         * Создает заголовок с кнопкой закрытия
-         *
-         * @param {string} title Текст заголовка
-         * @param {HTMLElement} errorBlock Блок ошибок для удаления
-         * @returns {HTMLElement}
-         */
-        createErrorTitle: function(title, errorBlock) {
-            const container = BX.create('div', {
-                style: {
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '10px'
-                }
-            });
-
-            const errorTitle = BX.create('div', {
-                props: {
-                    className: 'rwb-import-errors-title'
-                },
-                style: {
-                    fontWeight: 'bold',
-                    fontSize: '14px'
-                },
-                text: title
-            });
-
-            const closeBtn = BX.create('span', {
-                props: {
-                    className: 'rwb-import-errors-close'
-                },
-                style: {
-                    cursor: 'pointer',
-                    fontSize: '18px',
-                    fontWeight: 'bold',
-                    color: '#636e72',
-                    padding: '0 5px'
-                },
-                text: '×'
-            });
-
-            closeBtn.onclick = function() {
-                errorBlock.remove();
-            };
-
-            container.appendChild(errorTitle);
-            container.appendChild(closeBtn);
-
-            return container;
-        },
-
-        /**
-         * Создает список ошибок
-         *
-         * @param {Array} errors Массив ошибок
-         * @param {Object} styles Дополнительные стили
-         * @returns {HTMLElement}
-         */
-        createErrorList: function(errors, styles) {
-            const errorList = BX.create('ul', {
-                props: {
-                    className: 'rwb-import-errors-list'
-                },
-                style: Object.assign({
-                    margin: '0',
-                    paddingLeft: '20px'
-                }, styles)
-            });
-
-            errors.forEach(function(error) {
-                const errorText = this.formatError(error);
-                const errorItem = BX.create('li', {
-                    style: {
-                        marginBottom: '5px'
-                    },
-                    text: errorText
-                });
-                errorList.appendChild(errorItem);
-            }.bind(this));
-
-            return errorList;
-        },
-
-        /**
-         * Форматирует ошибку в строку
-         *
-         * @param {string|Object} error Ошибка (строка или объект ImportError)
-         * @returns {string}
-         */
-        formatError: function(error) {
-            if (typeof error === 'string') {
-                return error;
-            }
-
-            if (error && error.message) {
-                // ImportError формат: {type, code, message, row, field, context}
-                let errorText = error.message;
-                if (error.field) {
-                    errorText += ' (Поле: ' + error.field + ')';
-                }
-                if (error.row !== null && error.row !== undefined) {
-                    errorText += ' (Строка: ' + error.row + ')';
-                }
-                return errorText;
-            }
-
-            return JSON.stringify(error);
-        },
-
-        /**
-         * Создает секцию с информацией об успешных добавлениях
-         *
-         * @param {number} addedCount Количество успешно добавленных записей
-         * @param {boolean} isDryRun Флаг режима dry run
-         * @param {Object} wouldBeAddedDetails Детали записей, которые были бы добавлены
-         * @returns {HTMLElement}
-         */
-        createSuccessSection: function(addedCount, isDryRun, wouldBeAddedDetails) {
-            const successSection = BX.create('div', {
-                style: {
-                    marginTop: '15px',
-                    paddingTop: '15px',
-                    borderTop: '1px solid rgba(0, 0, 0, 0.1)'
-                }
-            });
-
-            const successTitle = BX.create('div', {
-                style: {
-                    fontWeight: 'bold',
-                    marginBottom: '10px',
-                    fontSize: '14px'
-                },
-                text: isDryRun ? 'Компании, которые будут добавлены:' : 'Успешно добавленные компании:'
-            });
-
-            successSection.appendChild(successTitle);
-
-            const successList = BX.create('ul', {
-                props: {
-                    className: 'rwb-import-success-list'
-                },
-                style: {
-                    margin: '0',
-                    paddingLeft: '20px',
-                    maxHeight: '200px',
-                    overflowY: 'auto'
-                }
-            });
-
-            // Если есть детали, показываем их
-            if (wouldBeAddedDetails && Object.keys(wouldBeAddedDetails).length > 0) {
-                Object.keys(wouldBeAddedDetails).forEach(function(rowIndex) {
-                    const item = wouldBeAddedDetails[rowIndex];
-                    const companyName = item.data && item.data.TITLE ? item.data.TITLE : 'Компания';
-                    const listItem = BX.create('li', {
-                        style: {
-                            marginBottom: '5px',
-                            color: '#16a085'
-                        },
-                        text: 'Строка ' + item.row + ': ' + companyName
-                    });
-                    successList.appendChild(listItem);
-                });
+            // Модификатор цвета по результату
+            var modifier;
+            if (errorRowCount === 0) {
+                modifier = 'success';
+            } else if (successCount === 0) {
+                modifier = 'error';
             } else {
-                // Если деталей нет, просто показываем количество
-                const listItem = BX.create('li', {
-                    style: {
-                        marginBottom: '5px',
-                        color: '#16a085'
-                    },
-                    text: 'Всего: ' + addedCount + ' компаний'
-                });
-                successList.appendChild(listItem);
+                modifier = isDryRun ? 'info' : 'warning';
             }
 
-            successSection.appendChild(successList);
+            var block = this.createBlock('rwb-import-errors', modifier);
 
-            return successSection;
+            var title = isDryRun ? 'Результаты Dry Run' : 'Результаты импорта';
+            block.appendChild(this.createTitle(title, block));
+
+            // Компактная статистика
+            var successLabel = isDryRun ? 'Готово к добавлению' : 'Успешно';
+            var statsText = 'Всего: ' + totalRows
+                + '  |  ' + successLabel + ': ' + successCount
+                + '  |  Ошибки: ' + errorRowCount;
+
+            var statsEl = BX.create('div', {
+                props: {className: 'rwb-result-stats'}
+            });
+            statsEl.textContent = statsText;
+
+            if (errorRowCount > 0) {
+                statsEl.style.marginBottom = '10px';
+            }
+
+            block.appendChild(statsEl);
+
+            // Сводка по типам ошибок
+            if (allErrors.length > 0) {
+                var summary = this.buildErrorSummary(allErrors);
+                if (summary.length > 0) {
+                    var summaryTitle = BX.create('div', {
+                        props: {className: 'rwb-result-summary-title'}
+                    });
+                    summaryTitle.textContent = 'Типы ошибок:';
+
+                    block.appendChild(summaryTitle);
+                    block.appendChild(this.createList(summary));
+                }
+            }
+
+            container.appendChild(block);
+            block.scrollIntoView({behavior: 'smooth', block: 'nearest'});
         },
 
         /**
-         * Обрабатывает ошибки из Bitrix AJAX
+         * Группирует ошибки по тексту сообщения
          *
-         * @param {Object} error Объект ошибки от Bitrix
+         * @param {Array} errors
+         * @returns {string[]}
+         */
+        buildErrorSummary: function (errors) {
+            var counts = {};
+
+            errors.forEach(function (error) {
+                var msg = (error && error.message) ? error.message : String(error);
+                counts[msg] = (counts[msg] || 0) + 1;
+            });
+
+            var result = [];
+            Object.keys(counts).forEach(function (msg) {
+                var count = counts[msg];
+                result.push(count > 1 ? msg + ' (' + count + ' стр.)' : msg);
+            });
+
+            return result;
+        },
+
+        // --- Вспомогательные методы ---
+
+        /**
+         * Создаёт блок-обёртку с CSS-модификатором
+         *
+         * @param {string} id       ID блока
+         * @param {string} modifier Модификатор цвета (warning|success|error|info)
+         * @returns {HTMLElement}
+         */
+        createBlock: function (id, modifier) {
+            return BX.create('div', {
+                props: {
+                    id: id,
+                    className: 'rwb-result-block rwb-result-block--' + modifier
+                }
+            });
+        },
+
+        /**
+         * Создаёт заголовок с кнопкой закрытия
+         *
+         * @param {string} text  Текст заголовка
+         * @param {HTMLElement} block Блок для удаления
+         * @returns {HTMLElement}
+         */
+        createTitle: function (text, block) {
+            var header = BX.create('div', {
+                props: {className: 'rwb-result-header'}
+            });
+
+            var titleEl = BX.create('div', {
+                props: {className: 'rwb-result-title'}
+            });
+            titleEl.textContent = text;
+
+            var closeBtn = BX.create('span', {
+                props: {className: 'rwb-result-close'}
+            });
+            closeBtn.textContent = '\u00d7';
+            closeBtn.onclick = function () {
+                block.remove();
+            };
+
+            header.appendChild(titleEl);
+            header.appendChild(closeBtn);
+            return header;
+        },
+
+        /**
+         * Создаёт список <ul>
+         *
+         * @param {string[]} items
+         * @returns {HTMLElement}
+         */
+        createList: function (items) {
+            var ul = BX.create('ul', {
+                props: {className: 'rwb-result-list'}
+            });
+
+            items.forEach(function (text) {
+                var li = BX.create('li');
+                li.textContent = text;
+                ul.appendChild(li);
+            });
+
+            return ul;
+        },
+
+        /**
+         * Удаляет блок по ID
+         *
+         * @param {string} id
+         */
+        removeBlock: function (id) {
+            var el = BX(id);
+            if (el) {
+                el.remove();
+            }
+        },
+
+        /**
+         * Парсит ошибки из Bitrix AJAX
+         *
+         * @param {Object} error
          * @returns {Array}
          */
-        parseBitrixError: function(error) {
-            let errors = [];
+        parseBitrixError: function (error) {
+            var errors = [];
 
             if (error.status && error.errors && error.errors.length > 0) {
-                errors = error.errors.map(function(e) {
-                    return {
-                        message: e.message || String(e),
-                        code: e.code || 'ERROR'
-                    };
+                errors = error.errors.map(function (e) {
+                    return {message: e.message || String(e), code: e.code || 'ERROR'};
                 });
             } else if (error.message) {
                 errors = [{message: error.message}];

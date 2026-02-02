@@ -3,6 +3,7 @@
 namespace Rwb\Massops\Import\Service;
 
 use Bitrix\Main\ArgumentException;
+use Bitrix\Main\Error;
 use Bitrix\Main\InvalidOperationException;
 use Bitrix\Main\LoaderException;
 use Exception;
@@ -111,6 +112,8 @@ abstract class AImport
                 $fieldCodes
             );
 
+            $hasErrors = false;
+
             // 1. Бизнес-валидация
             $validation = $this->validateRow($fields, $uf, $fm);
 
@@ -121,7 +124,7 @@ abstract class AImport
                         $rowIndex
                     );
                 }
-                continue;
+                $hasErrors = true;
             }
 
             // 2. CRM-валидация / сохранение
@@ -133,14 +136,19 @@ abstract class AImport
             );
 
             if (!$result->isSuccess()) {
-                foreach ($result->getErrorMessages() as $message) {
+                foreach ($result->getErrors() as $error) {
                     $errors[$rowIndex][] = new ImportError(
                         type: 'validation',
                         code: 'INVALID',
-                        message: $message,
-                        row: $rowIndex + 1
+                        message: $error->getMessage(),
+                        row: $rowIndex + 1,
+                        field: $this->extractFieldFromError($error)
                     );
                 }
+                $hasErrors = true;
+            }
+
+            if ($hasErrors) {
                 continue;
             }
 
@@ -182,6 +190,58 @@ abstract class AImport
             field: $error->field,
             context: $error->context
         );
+    }
+
+    /**
+     * Извлекает код поля из объекта ошибки Bitrix Result
+     *
+     * Стратегии поиска (по приоритету):
+     * 1. Прямое совпадение Error::getCode() с кодом поля
+     * 2. Код поля в суффиксе Error::getCode() (BX_CRM_REQUIRED_FIELD_TITLE → TITLE)
+     * 3. Парсинг названия поля из текста ошибки (Поле "Название" → TITLE)
+     *
+     * @param Error $error Объект ошибки Bitrix
+     *
+     * @return string|null Код поля или null
+     * @throws LoaderException
+     */
+    protected function extractFieldFromError(Error $error): ?string
+    {
+        $fieldList = $this->repository->getFieldList();
+        $fieldCodes = array_keys($fieldList);
+
+        // 1. Поиск по Error::getCode()
+        $code = (string) $error->getCode();
+
+        if ($code !== '' && $code !== '0') {
+            // Прямое совпадение
+            if (in_array($code, $fieldCodes, true)) {
+                return $code;
+            }
+
+            // Суффикс (BX_CRM_REQUIRED_FIELD_TITLE → TITLE)
+            foreach ($fieldCodes as $fieldCode) {
+                if (str_ends_with($code, '_' . $fieldCode)) {
+                    return $fieldCode;
+                }
+            }
+        }
+
+        // 2. Парсинг названия поля из текста сообщения
+        //    Формат Bitrix: Поле "Название" обязательно для заполнения
+        $message = $error->getMessage();
+
+        if (preg_match('/[«""\'](.+?)[»""\']/', $message, $matches)) {
+            $fieldTitle = $matches[1];
+
+            // название → код (Название → TITLE)
+            $flipped = array_flip($fieldList);
+            if (isset($flipped[$fieldTitle])) {
+                return $flipped[$fieldTitle];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -260,9 +320,11 @@ abstract class AImport
     }
 
     /**
-     * Выполняет валидацию строки импорта
+     * Выполняет бизнес-валидацию строки импорта
      *
-     * Реализуется в конкретных сервисах импорта.
+     * По умолчанию — пустая (CRM сама проверяет обязательные поля).
+     * Переопределяется только если есть кастомная логика,
+     * которую CRM не проверит (например, составные условия).
      *
      * @param array $fields Основные поля
      * @param array $uf     Пользовательские поля
@@ -270,9 +332,11 @@ abstract class AImport
      *
      * @return ValidationResult
      */
-    abstract protected function validateRow(
+    protected function validateRow(
         array $fields,
         array $uf,
         array $fm
-    ): ValidationResult;
+    ): ValidationResult {
+        return new ValidationResult();
+    }
 }
