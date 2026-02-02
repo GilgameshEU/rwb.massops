@@ -5,7 +5,7 @@ namespace Rwb\Massops\Import\Parser;
 /**
  * Интерфейс парсера импортируемых файлов
  */
-interface IParser
+interface ParserInterface
 {
     /**
      * Парсит файл и возвращает данные в виде массива строк

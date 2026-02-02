@@ -7,7 +7,7 @@ use RuntimeException;
 /**
  * Парсер CSV-файлов
  */
-class Csv implements IParser
+class CsvParser implements ParserInterface
 {
     /**
      * Читает CSV-файл и возвращает данные в виде массива строк
@@ -15,7 +15,6 @@ class Csv implements IParser
      * @param string $path Путь к CSV-файлу
      *
      * @return array Массив строк файла
-     *
      * @throws RuntimeException Если файл невозможно прочитать
      */
     public function parse(string $path): array

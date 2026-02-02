@@ -1,7 +1,10 @@
 <?php
 
-namespace Rwb\Massops\Component\Helper;
+namespace Rwb\Massops\Support;
 
+/**
+ * Конвертер данных в формат Bitrix грида
+ */
 class GridDataConverter
 {
     /**
@@ -18,7 +21,6 @@ class GridDataConverter
             return ['columns' => [], 'rows' => []];
         }
 
-        // Если заголовки не переданы, берем первую строку
         if ($headerRow === null) {
             $headerRow = array_shift($rows);
         }

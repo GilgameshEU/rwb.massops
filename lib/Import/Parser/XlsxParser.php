@@ -7,7 +7,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 /**
  * Парсер XLSX-файлов
  */
-class Xlsx implements IParser
+class XlsxParser implements ParserInterface
 {
     /**
      * Читает XLSX-файл и возвращает данные активного листа

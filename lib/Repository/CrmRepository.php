@@ -1,6 +1,6 @@
 <?php
 
-namespace Rwb\Massops\Repository\CRM;
+namespace Rwb\Massops\Repository;
 
 use Bitrix\Crm\Item;
 use Bitrix\Crm\Multifield\Assembler;
@@ -16,37 +16,60 @@ use RuntimeException;
 use Bitrix\Crm\Field;
 
 /**
- * Базовый репозиторий CRM сущности
+ * Репозиторий CRM-сущности
+ *
+ * Предоставляет доступ к полям, метаданным и операциям добавления
+ * для любого типа CRM-сущности (компании, контакты, сделки).
  */
-abstract class ARepository
+final class CrmRepository
 {
     /**
      * Исключенные поля
      */
-    protected const EXCLUDED_FIELDS = [
+    private const EXCLUDED_FIELDS = [
         'OPENED',
     ];
 
     /**
-     * Возвращает тип CRM сущности
-     *
-     * @return int
+     * Кэш метаданных полей (per-instance)
      */
-    abstract public function getType(): int;
+    private ?array $fieldMetaCache = null;
+
+    public function __construct(
+        private readonly EntityType $entityType
+    ) {
+    }
+
+    /**
+     * Возвращает тип CRM сущности
+     */
+    public function getType(): int
+    {
+        return $this->entityType->crmTypeId();
+    }
 
     /**
      * Возвращает имя сущности
-     *
-     * @return string
      */
-    abstract public function getName(): string;
+    public function getName(): string
+    {
+        return $this->entityType->crmName();
+    }
+
+    /**
+     * Возвращает EntityType enum
+     */
+    public function getEntityType(): EntityType
+    {
+        return $this->entityType;
+    }
 
     /**
      * Инициализирует контекст CRM
      *
      * @throws LoaderException
      */
-    protected function initContext(): void
+    private function initContext(): void
     {
         Loader::requireModule('crm');
     }
@@ -73,26 +96,18 @@ abstract class ARepository
     /**
      * Возвращает мета-информацию о полях CRM-сущности
      *
-     * Данные кешируются в рамках запроса.
-     * Используется для формирования шаблонов импорта и определения обязательных полей.
+     * Данные кешируются в рамках жизни объекта.
      *
-     * @return array<string, array{
-     *     code: string,
-     *     title: string,
-     *     required: bool
-     * }>
-     *
+     * @return array<string, array{code: string, title: string, required: bool}>
      * @throws LoaderException
      */
-    protected function getFieldsMeta(): array
+    private function getFieldsMeta(): array
     {
-        static $cache = null;
-
-        if ($cache !== null) {
-            return $cache;
+        if ($this->fieldMetaCache !== null) {
+            return $this->fieldMetaCache;
         }
 
-        $cache = [];
+        $this->fieldMetaCache = [];
         $fields = $this->getFactory()->getFieldsCollection();
 
         foreach ($fields as $field) {
@@ -101,12 +116,12 @@ abstract class ARepository
             }
 
             if ($field->getName() === Item::FIELD_NAME_FM) {
-                $cache['PHONE'] = [
+                $this->fieldMetaCache['PHONE'] = [
                     'code' => 'PHONE',
                     'title' => 'Телефон',
                     'required' => false,
                 ];
-                $cache['EMAIL'] = [
+                $this->fieldMetaCache['EMAIL'] = [
                     'code' => 'EMAIL',
                     'title' => 'E-mail',
                     'required' => false,
@@ -114,25 +129,20 @@ abstract class ARepository
                 continue;
             }
 
-            $cache[$field->getName()] = [
+            $this->fieldMetaCache[$field->getName()] = [
                 'code' => $field->getName(),
                 'title' => $field->getTitle(),
                 'required' => $field->isRequired(),
             ];
         }
 
-        return $cache;
+        return $this->fieldMetaCache;
     }
 
     /**
      * Возвращает список доступных полей сущности
      *
-     * Используется для:
-     * - генерации шаблонов импорта
-     * - маппинга полей CSV/XLSX
-     *
      * @return array<string, string> код => название
-     *
      * @throws LoaderException
      */
     public function getFieldList(): array
@@ -150,7 +160,6 @@ abstract class ARepository
      * Возвращает список кодов обязательных полей сущности
      *
      * @return string[]
-     *
      * @throws LoaderException
      */
     public function getRequiredFieldCodes(): array
@@ -168,12 +177,8 @@ abstract class ARepository
 
     /**
      * Проверяет, должно ли поле быть исключено
-     *
-     * @param object $field
-     *
-     * @return bool
      */
-    protected function isFieldExcluded(object $field): bool
+    private function isFieldExcluded(object $field): bool
     {
         $attributes = $field->getAttributes();
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace Rwb\Massops\Component\Helper;
+namespace Rwb\Massops\Support;
 
 use JetBrains\PhpStorm\NoReturn;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -10,22 +10,17 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 
+/**
+ * Экспортёр XLSX-шаблонов для импорта
+ */
 class XlsxTemplateExporter
 {
     /**
      * Создаёт и отдаёт XLSX-шаблон для импорта
      *
-     * В первой строке формируются заголовки полей.
-     * Обязательные поля подсвечиваются цветом и помечаются комментарием.
-     *
-     * @param array<string, string> $fields
-     *        Список полей в формате: код => название
-     *
-     * @param string[] $requiredCodes
-     *        Список кодов обязательных полей
-     *
-     * @param string $filename
-     *        Имя файла для скачивания
+     * @param array<string, string> $fields        Список полей (код => название)
+     * @param string[]              $requiredCodes Коды обязательных полей
+     * @param string                $filename      Имя файла для скачивания
      */
     #[NoReturn] public static function export(array $fields, array $requiredCodes, string $filename = 'import_template.xlsx'): void
     {
@@ -57,11 +52,8 @@ class XlsxTemplateExporter
 
     /**
      * Применяет стиль для обязательного поля
-     *
-     * @param Worksheet $sheet Рабочий лист
-     * @param string $cell     Адрес ячейки (например: A1)
      */
-    protected static function applyRequiredStyle(Worksheet $sheet, string $cell): void
+    private static function applyRequiredStyle(Worksheet $sheet, string $cell): void
     {
         $sheet->getStyle($cell)->applyFromArray([
             'font' => [
@@ -82,11 +74,8 @@ class XlsxTemplateExporter
 
     /**
      * Добавляет комментарий к обязательному полю
-     *
-     * @param Worksheet $sheet Рабочий лист
-     * @param string $cell     Адрес ячейки
      */
-    protected static function addRequiredComment(Worksheet $sheet, string $cell): void
+    private static function addRequiredComment(Worksheet $sheet, string $cell): void
     {
         $comment = $sheet->getComment($cell);
         $comment->getText()->createTextRun('Обязательное поле');
@@ -97,12 +86,9 @@ class XlsxTemplateExporter
     /**
      * Отдаёт XLSX-файл в браузер
      *
-     * Полностью очищает буферы вывода и завершает выполнение скрипта.
-     *
-     * @param Spreadsheet $spreadsheet Объект таблицы
-     * @param string $filename         Имя файла для скачивания
+     * @todo Заменить die() на более чистый способ завершения response
      */
-    #[NoReturn] protected static function output(Spreadsheet $spreadsheet, string $filename): void
+    #[NoReturn] private static function output(Spreadsheet $spreadsheet, string $filename): void
     {
         global $APPLICATION;
 

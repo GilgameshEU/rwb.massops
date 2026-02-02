@@ -3,7 +3,7 @@
 namespace Rwb\Massops\Import;
 
 use Bitrix\Main\LoaderException;
-use Rwb\Massops\Repository\CRM\ARepository;
+use Rwb\Massops\Repository\CrmRepository;
 
 class FieldValidator
 {
@@ -13,13 +13,13 @@ class FieldValidator
      * Валидирует поля импортируемых данных
      *
      * @param array $rows             Массив строк данных для импорта
-     * @param ARepository $repository Репозиторий для проверки существования полей
+     * @param CrmRepository $repository Репозиторий для проверки существования полей
      * @param string $entityTitle     Название сущности для сообщений об ошибках
      *
      * @return ImportError[]
      * @throws LoaderException
      */
-    public function validate(array $rows, ARepository $repository, string $entityTitle = ''): array
+    public function validate(array $rows, CrmRepository $repository, string $entityTitle = ''): array
     {
         $this->entityTitle = $entityTitle;
 
@@ -102,14 +102,14 @@ class FieldValidator
      * Проверяет существование полей в CRM
      *
      * @param array $header           Массив заголовков для проверки
-     * @param ARepository $repository Репозиторий CRM для получения списка полей
+     * @param CrmRepository $repository Репозиторий CRM для получения списка полей
      *
      * @return ImportError[]
      * @throws LoaderException
      */
     private function assertFieldsExist(
         array $header,
-        ARepository $repository
+        CrmRepository $repository
     ): array {
         $errors = [];
         $crmTitles = array_values($repository->getFieldList());

@@ -1,7 +1,10 @@
 <?php
 
-namespace Rwb\Massops\Component\Helper;
+namespace Rwb\Massops\Support;
 
+/**
+ * Хранилище данных импорта в сессии
+ */
 class SessionStorage
 {
     private const SESSION_KEY = 'RWB_MASSOPS_RESULT';
@@ -37,8 +40,6 @@ class SessionStorage
 
     /**
      * Получает колонки из сессии
-     *
-     * @return array
      */
     public static function getColumns(): array
     {
@@ -47,8 +48,6 @@ class SessionStorage
 
     /**
      * Получает строки из сессии
-     *
-     * @return array
      */
     public static function getRows(): array
     {
@@ -57,8 +56,6 @@ class SessionStorage
 
     /**
      * Сохраняет тип CRM-сущности
-     *
-     * @param string $entityType
      */
     public static function saveEntityType(string $entityType): void
     {
@@ -67,8 +64,6 @@ class SessionStorage
 
     /**
      * Получает тип CRM-сущности из сессии
-     *
-     * @return string|null
      */
     public static function getEntityType(): ?string
     {
@@ -85,8 +80,6 @@ class SessionStorage
 
     /**
      * Проверяет наличие данных в сессии
-     *
-     * @return bool
      */
     public static function hasData(): bool
     {
