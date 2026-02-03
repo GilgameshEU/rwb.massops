@@ -561,6 +561,209 @@
     font-size: 13px;
 }
 
+/* ===== Прогресс-бар импорта ===== */
+
+.rwb-progress {
+    margin: 16px 0;
+    padding: 16px 20px;
+    background: #f8f8fb;
+    border-radius: 8px;
+    border: 1px solid #e8e8ec;
+}
+
+.rwb-progress__bar {
+    height: 24px;
+    background: #e8e8ec;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+.rwb-progress__fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3F51B5, #283593);
+    border-radius: 12px;
+    transition: width 0.4s ease;
+}
+
+.rwb-progress__text {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    color: #525672;
+    margin-bottom: 4px;
+}
+
+#rwb-progress-label {
+    font-weight: 500;
+}
+
+#rwb-progress-percent {
+    font-weight: 600;
+    color: #3F51B5;
+}
+
+.rwb-progress__stats {
+    font-size: 13px;
+    color: #8b8fa1;
+}
+
+/* ===== Вкладка «Статистика» ===== */
+
+.rwb-stats {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.rwb-stats__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 16px 20px;
+    background: #f8f8fb;
+    border-radius: 8px;
+    border: 1px solid #e8e8ec;
+}
+
+.rwb-stats__title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.rwb-stats__loading {
+    text-align: center;
+    padding: 48px 20px;
+    font-size: 14px;
+    color: #8b8fa1;
+}
+
+.rwb-stats__empty {
+    text-align: center;
+    padding: 80px 20px;
+    font-size: 14px;
+    color: #8b8fa1;
+}
+
+.rwb-stats__table-wrap {
+    overflow-x: auto;
+}
+
+.rwb-stats__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.rwb-stats__table th {
+    text-align: left;
+    padding: 10px 12px;
+    background: #f0f0f3;
+    color: #525672;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 2px solid #e8e8ec;
+    white-space: nowrap;
+}
+
+.rwb-stats__table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #f0f0f3;
+    color: #333;
+    vertical-align: middle;
+}
+
+.rwb-stats__table tbody tr:hover td {
+    background: #f8f8fb;
+}
+
+.rwb-stats__status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.rwb-stats__status--pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.rwb-stats__status--processing {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.rwb-stats__status--completed {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.rwb-stats__status--error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.rwb-stats__pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f3;
+}
+
+.rwb-stats__page-info {
+    font-size: 13px;
+    color: #8b8fa1;
+}
+
+/* --- ID добавленных сущностей --- */
+
+.rwb-stats__ids {
+    line-height: 1.6;
+}
+
+.rwb-stats__id-link {
+    color: #3F51B5;
+    text-decoration: none;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.rwb-stats__id-link:hover {
+    color: #283593;
+    text-decoration: underline;
+}
+
+.rwb-stats__ids-toggle {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #3F51B5;
+    background: #e8eaf6;
+    border-radius: 3px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.rwb-stats__ids-toggle:hover {
+    background: #c5cae9;
+    color: #283593;
+}
+
 /* ===== Утилиты кнопок ===== */
 
 .ui-btn[disabled] {

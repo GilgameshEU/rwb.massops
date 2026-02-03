@@ -2,7 +2,7 @@
 
 namespace Rwb\Massops\Support;
 
-use JetBrains\PhpStorm\NoReturn;
+use Bitrix\Main\Application;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -22,7 +22,7 @@ class XlsxTemplateExporter
      * @param string[]              $requiredCodes Коды обязательных полей
      * @param string                $filename      Имя файла для скачивания
      */
-    #[NoReturn] public static function export(array $fields, array $requiredCodes, string $filename = 'import_template.xlsx'): void
+    public static function export(array $fields, array $requiredCodes, string $filename = 'import_template.xlsx'): void
     {
         $requiredMap = array_flip($requiredCodes);
 
@@ -85,10 +85,8 @@ class XlsxTemplateExporter
 
     /**
      * Отдаёт XLSX-файл в браузер
-     *
-     * @todo Заменить die() на более чистый способ завершения response
      */
-    #[NoReturn] private static function output(Spreadsheet $spreadsheet, string $filename): void
+    private static function output(Spreadsheet $spreadsheet, string $filename): void
     {
         global $APPLICATION;
 
@@ -106,6 +104,6 @@ class XlsxTemplateExporter
         $writer = new Xlsx($spreadsheet);
         $writer->save('php://output');
 
-        die();
+        Application::getInstance()->end();
     }
 }

@@ -93,12 +93,27 @@ class ImportService
         $dryRun = ($mode === ImportMode::DryRun);
 
         foreach ($rows as $rowIndex => $row) {
-            [$fields, $uf, $fm] = $this->normalizer->normalize(
+            $normalized = $this->normalizer->normalize(
                 array_values($row['data']),
                 $fieldCodes
             );
 
+            $fields = $normalized->fields;
+            $uf = $normalized->uf;
+            $fm = $normalized->fm;
+
             $hasErrors = false;
+
+            // 0. Ошибки нормализации (невалидные телефоны и т.д.)
+            if (!empty($normalized->errors)) {
+                foreach ($normalized->errors as $error) {
+                    $errors[$rowIndex][] = $this->attachRowToError(
+                        $error,
+                        $rowIndex
+                    );
+                }
+                $hasErrors = true;
+            }
 
             // 1. Бизнес-валидация
             $validation = $this->validateRow($fields, $uf, $fm);
@@ -142,6 +157,9 @@ class ImportService
             $items[$rowIndex] = [
                 'row' => $rowIndex + 1,
                 'data' => $fields,
+                'entityId' => !$dryRun && method_exists($result, 'getId')
+                    ? $result->getId()
+                    : null,
             ];
         }
 

@@ -17,8 +17,10 @@ Asset::getInstance()->AddJS($this->GetFolder() . '/js/wizardManager.js');
 Asset::getInstance()->AddJS($this->GetFolder() . '/js/entitySelector.js');
 Asset::getInstance()->AddJS($this->GetFolder() . '/js/dropzoneHandler.js');
 Asset::getInstance()->AddJS($this->GetFolder() . '/js/uploadHandler.js');
+Asset::getInstance()->AddJS($this->GetFolder() . '/js/progressHandler.js');
 Asset::getInstance()->AddJS($this->GetFolder() . '/js/importHandler.js');
 Asset::getInstance()->AddJS($this->GetFolder() . '/js/templateHandler.js');
+Asset::getInstance()->AddJS($this->GetFolder() . '/js/statsHandler.js');
 Asset::getInstance()->AddJS($this->GetFolder() . '/js/main.js');
 
 $entityTypes = $arResult['ENTITY_TYPES'] ?? [];
@@ -54,6 +56,9 @@ $svgIcons = [
         <div class="rwb-massops__tab rwb-massops__tab--disabled" data-tab="dedup">
             Поиск дублей
             <span class="rwb-massops__tab-badge">скоро</span>
+        </div>
+        <div class="rwb-massops__tab" data-tab="stats">
+            Статистика
         </div>
     </div>
 
@@ -143,6 +148,17 @@ $svgIcons = [
 
                         <div id="rwb-results-container"></div>
 
+                        <div class="rwb-progress" id="rwb-import-progress" style="display: none;">
+                            <div class="rwb-progress__bar">
+                                <div class="rwb-progress__fill" id="rwb-progress-fill" style="width: 0%;"></div>
+                            </div>
+                            <div class="rwb-progress__text">
+                                <span id="rwb-progress-label">Импорт...</span>
+                                <span id="rwb-progress-percent">0%</span>
+                            </div>
+                            <div class="rwb-progress__stats" id="rwb-progress-stats"></div>
+                        </div>
+
                         <div id="rwb-grid-container">
                             <?php
                             $APPLICATION->IncludeComponent(
@@ -181,6 +197,43 @@ $svgIcons = [
                 </div>
                 <div class="rwb-placeholder__title">Поиск дублей</div>
                 <div class="rwb-placeholder__text">Функционал находится в разработке и скоро будет доступен.</div>
+            </div>
+        </div>
+
+        <!-- ===== ТАБ: Статистика ===== -->
+        <div id="rwb-tab-stats" class="rwb-massops__tab-content">
+            <div class="rwb-stats">
+                <div class="rwb-stats__toolbar">
+                    <div class="rwb-stats__title">История операций импорта</div>
+                    <button class="ui-btn ui-btn-light ui-btn-sm" id="rwb-stats-refresh">Обновить</button>
+                </div>
+                <div class="rwb-stats__loading" id="rwb-stats-loading" style="display: none;">
+                    Загрузка данных...
+                </div>
+                <div class="rwb-stats__empty" id="rwb-stats-empty" style="display: none;">
+                    Нет данных об операциях импорта.
+                </div>
+                <div class="rwb-stats__table-wrap" id="rwb-stats-table-wrap" style="display: none;">
+                    <table class="rwb-stats__table" id="rwb-stats-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Пользователь</th>
+                                <th>Сущность</th>
+                                <th>Статус</th>
+                                <th>Всего</th>
+                                <th>Успешно</th>
+                                <th>Ошибок</th>
+                                <th>Добавлено (ID)</th>
+                                <th>Создано</th>
+                                <th>Начало</th>
+                                <th>Завершено</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rwb-stats-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="rwb-stats__pagination" id="rwb-stats-pagination" style="display: none;"></div>
             </div>
         </div>
 

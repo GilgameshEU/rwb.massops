@@ -12,6 +12,7 @@ use Bitrix\Main\DB\SqlQueryException;
 use Bitrix\Main\Engine\CurrentUser;
 use Bitrix\Main\Entity\Base;
 use Bitrix\Main\EventManager;
+use Bitrix\Main\Loader;
 use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\ModuleManager;
 use Bitrix\Main\SystemException;
@@ -86,11 +87,28 @@ class rwb_massops extends CModule
     /**
      * Удаление модуля rwb.massops
      *
+     * Шаг 1 — показывает форму подтверждения (unstep.php)
+     * Шаг 2 — выполняет удаление с учётом выбора пользователя
+     *
      * @return bool
      * @throws ArgumentNullException
      */
     public function doUninstall(): bool
     {
+        global $APPLICATION;
+
+        $request = Application::getInstance()->getContext()->getRequest();
+        $step = (int) $request->get('step');
+
+        if ($step < 2) {
+            $APPLICATION->includeAdminFile(
+                Loc::getMessage('RWB_MASSOPS_UNINSTALL'),
+                $this->MODULE_FOLDER . '/install/unstep.php'
+            );
+
+            return true;
+        }
+
         $this->unInstallFiles();
         $this->unInstallEvents();
         $this->unInstallDB();
@@ -106,7 +124,9 @@ class rwb_massops extends CModule
     public function installDB(): bool
     {
         ModuleManager::registerModule($this->MODULE_ID);
+        Loader::includeModule($this->MODULE_ID);
         $this->installOrm();
+        $this->installAgent();
 
         return true;
     }
@@ -119,6 +139,7 @@ class rwb_massops extends CModule
      */
     public function unInstallDB(): bool
     {
+        Loader::includeModule($this->MODULE_ID);
         $postList = Application::getInstance()->getContext()->getRequest()->toArray();
 
         if ($postList['save_option'] !== 'Y') {
@@ -127,6 +148,7 @@ class rwb_massops extends CModule
         if ($postList['save_data'] !== 'Y') {
             $this->unInstallOrm();
         }
+        $this->unInstallAgent();
         ModuleManager::unRegisterModule($this->MODULE_ID);
 
         return true;
@@ -346,8 +368,36 @@ class rwb_massops extends CModule
     public function getOrmList(): array
     {
         return [
-            // Пример: \Rwb\Massops\ExampleTable::class,
+            \Rwb\Massops\Queue\ImportJobTable::class,
         ];
+    }
+
+    /**
+     * Регистрирует агент обработки очереди импорта
+     */
+    private function installAgent(): void
+    {
+        \CAgent::AddAgent(
+            \Rwb\Massops\Queue\ImportAgent::getAgentName(),
+            $this->MODULE_ID,
+            'N',
+            30,
+            '',
+            'Y',
+            '',
+            100
+        );
+    }
+
+    /**
+     * Удаляет агент обработки очереди импорта
+     */
+    private function unInstallAgent(): void
+    {
+        \CAgent::RemoveAgent(
+            \Rwb\Massops\Queue\ImportAgent::getAgentName(),
+            $this->MODULE_ID
+        );
     }
 
     /**

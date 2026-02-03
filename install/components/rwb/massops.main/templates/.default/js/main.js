@@ -117,4 +117,15 @@ BX.ready(function () {
             });
         });
     }
+
+    // --- 11. Stats tab (lazy-load при переключении) ---
+    window.RwbStatsHandler.init();
+
+    var origSwitchTo = window.RwbTabManager.switchTo.bind(window.RwbTabManager);
+    window.RwbTabManager.switchTo = function (tabId) {
+        origSwitchTo(tabId);
+        if (tabId === 'stats') {
+            window.RwbStatsHandler.load();
+        }
+    };
 });

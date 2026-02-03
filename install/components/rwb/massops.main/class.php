@@ -8,11 +8,15 @@ use Bitrix\Main\AccessDeniedException;
 use Bitrix\Main\ArgumentException;
 use Bitrix\Main\Engine\Contract\Controllerable;
 use Bitrix\Main\Engine\CurrentUser;
+use Bitrix\Main\Entity\ExpressionField;
 use Bitrix\Main\Loader;
 use Bitrix\Main\LoaderException;
+use Bitrix\Main\UserTable;
 use Rwb\Massops\EntityRegistry;
 use Rwb\Massops\Import\FieldValidator;
 use Rwb\Massops\Import\FileParser;
+use Rwb\Massops\Queue\ImportJobStatus;
+use Rwb\Massops\Queue\ImportJobTable;
 use Rwb\Massops\Support\GridDataConverter;
 use Rwb\Massops\Support\SessionStorage;
 use Rwb\Massops\Support\XlsxTemplateExporter;
@@ -52,6 +56,9 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'runImport' => ['prefilters' => []],
             'runDryRun' => ['prefilters' => []],
             'clear' => ['prefilters' => []],
+            'startImport' => ['prefilters' => []],
+            'getProgress' => ['prefilters' => []],
+            'getStats' => ['prefilters' => []],
             // Обратная совместимость
             'importCompanies' => ['prefilters' => []],
             'dryRunImport' => ['prefilters' => []],
@@ -291,6 +298,214 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'errors' => $gridErrors,
             'wouldBeAddedDetails' => $wouldBeAdded,
             'fieldToColumn' => $this->getFieldToColumnMapping($entityType),
+        ];
+    }
+
+    /**
+     * Ставит импорт в очередь на фоновую обработку
+     *
+     * @return array{jobId: int}
+     * @throws AccessDeniedException
+     */
+    public function startImportAction(): array
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new AccessDeniedException();
+        }
+
+        if (!SessionStorage::hasData()) {
+            throw new RuntimeException('Нет данных для импорта');
+        }
+
+        $entityType = $this->resolveEntityType();
+        $rows = SessionStorage::getRows();
+
+        $result = ImportJobTable::add([
+            'USER_ID' => (int) CurrentUser::get()->getId(),
+            'ENTITY_TYPE' => $entityType,
+            'STATUS' => ImportJobStatus::Pending->value,
+            'TOTAL_ROWS' => count($rows),
+            'IMPORT_DATA' => serialize($rows),
+        ]);
+
+        if (!$result->isSuccess()) {
+            throw new RuntimeException('Не удалось создать задачу импорта');
+        }
+
+        return [
+            'jobId' => $result->getId(),
+        ];
+    }
+
+    /**
+     * Возвращает прогресс задачи импорта
+     *
+     * @return array
+     * @throws AccessDeniedException
+     */
+    public function getProgressAction(): array
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new AccessDeniedException();
+        }
+
+        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
+        $jobId = (int) $request->getPost('jobId');
+
+        if (!$jobId) {
+            throw new RuntimeException('Job ID не указан');
+        }
+
+        $job = ImportJobTable::getById($jobId)->fetch();
+
+        if (!$job) {
+            throw new RuntimeException('Задача не найдена');
+        }
+
+        if ((int) $job['USER_ID'] !== (int) CurrentUser::get()->getId()) {
+            throw new AccessDeniedException();
+        }
+
+        $isComplete = in_array($job['STATUS'], [
+            ImportJobStatus::Completed->value,
+            ImportJobStatus::Error->value,
+        ], true);
+
+        $totalRows = (int) $job['TOTAL_ROWS'];
+
+        $response = [
+            'status' => $job['STATUS'],
+            'totalRows' => $totalRows,
+            'processedRows' => (int) $job['PROCESSED_ROWS'],
+            'successCount' => (int) $job['SUCCESS_COUNT'],
+            'errorCount' => (int) $job['ERROR_COUNT'],
+            'isComplete' => $isComplete,
+            'progress' => $totalRows > 0
+                ? round(((int) $job['PROCESSED_ROWS'] / $totalRows) * 100, 1)
+                : 0,
+        ];
+
+        // При завершении — отдаём ошибки для подсветки грида
+        if ($isComplete && !empty($job['ERRORS_DATA'])) {
+            $errors = unserialize($job['ERRORS_DATA']);
+            $gridErrors = [];
+
+            foreach ($errors as $rowIndex => $rowErrors) {
+                $gridErrors[$rowIndex] = array_map(
+                    fn($error) => $error->toArray(),
+                    $rowErrors
+                );
+            }
+
+            $response['errors'] = $gridErrors;
+            $response['fieldToColumn'] = $this->getFieldToColumnMapping($job['ENTITY_TYPE']);
+        }
+
+        return $response;
+    }
+
+    /**
+     * Возвращает статистику задач импорта с пагинацией
+     *
+     * @return array
+     * @throws AccessDeniedException
+     */
+    public function getStatsAction(): array
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new AccessDeniedException();
+        }
+
+        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
+        $page = max(1, (int) $request->getPost('page'));
+        $pageSize = 20;
+        $offset = ($page - 1) * $pageSize;
+
+        // Общее количество записей
+        $countResult = ImportJobTable::getList([
+            'select' => ['CNT'],
+            'runtime' => [
+                new ExpressionField('CNT', 'COUNT(*)'),
+            ],
+        ])->fetch();
+        $totalCount = (int) ($countResult['CNT'] ?? 0);
+        $totalPages = max(1, (int) ceil($totalCount / $pageSize));
+
+        // Выборка задач без тяжёлых блобов IMPORT_DATA и ERRORS_DATA
+        $dbResult = ImportJobTable::getList([
+            'select' => [
+                'ID', 'USER_ID', 'ENTITY_TYPE', 'STATUS',
+                'TOTAL_ROWS', 'PROCESSED_ROWS', 'SUCCESS_COUNT', 'ERROR_COUNT',
+                'CREATED_IDS',
+                'CREATED_AT', 'STARTED_AT', 'FINISHED_AT',
+            ],
+            'order' => ['ID' => 'DESC'],
+            'limit' => $pageSize,
+            'offset' => $offset,
+        ]);
+
+        $jobs = [];
+        $userIds = [];
+
+        while ($row = $dbResult->fetch()) {
+            $jobs[] = $row;
+            $userIds[$row['USER_ID']] = true;
+        }
+
+        // Резолв имён пользователей одним запросом
+        $userNames = [];
+        if (!empty($userIds)) {
+            $userResult = UserTable::getList([
+                'select' => ['ID', 'NAME', 'LAST_NAME', 'LOGIN'],
+                'filter' => ['=ID' => array_keys($userIds)],
+            ]);
+            while ($user = $userResult->fetch()) {
+                $fullName = trim(($user['LAST_NAME'] ?? '') . ' ' . ($user['NAME'] ?? ''));
+                if ($fullName === '') {
+                    $fullName = $user['LOGIN'];
+                }
+                $userNames[(int) $user['ID']] = $fullName;
+            }
+        }
+
+        // Маппинг ключей сущностей в названия
+        $entityTitles = [];
+        foreach (EntityRegistry::getAllForUi() as $key => $config) {
+            $entityTitles[$key] = $config['title'];
+        }
+
+        // Форматирование результатов
+        $items = [];
+        foreach ($jobs as $job) {
+            $userId = (int) $job['USER_ID'];
+            $items[] = [
+                'id' => (int) $job['ID'],
+                'userId' => $userId,
+                'userName' => $userNames[$userId] ?? ('User #' . $userId),
+                'entityType' => $job['ENTITY_TYPE'],
+                'entityTitle' => $entityTitles[$job['ENTITY_TYPE']] ?? $job['ENTITY_TYPE'],
+                'status' => $job['STATUS'],
+                'totalRows' => (int) $job['TOTAL_ROWS'],
+                'processedRows' => (int) $job['PROCESSED_ROWS'],
+                'successCount' => (int) $job['SUCCESS_COUNT'],
+                'errorCount' => (int) $job['ERROR_COUNT'],
+                'createdIds' => !empty($job['CREATED_IDS'])
+                    ? unserialize($job['CREATED_IDS'])
+                    : [],
+                'createdAt' => $job['CREATED_AT'] ? $job['CREATED_AT']->toString() : null,
+                'startedAt' => $job['STARTED_AT'] ? $job['STARTED_AT']->toString() : null,
+                'finishedAt' => $job['FINISHED_AT'] ? $job['FINISHED_AT']->toString() : null,
+            ];
+        }
+
+        return [
+            'items' => $items,
+            'pagination' => [
+                'page' => $page,
+                'pageSize' => $pageSize,
+                'totalCount' => $totalCount,
+                'totalPages' => $totalPages,
+            ],
         ];
     }
 
