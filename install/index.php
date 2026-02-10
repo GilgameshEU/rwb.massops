@@ -13,9 +13,12 @@ use Bitrix\Main\Engine\CurrentUser;
 use Bitrix\Main\Entity\Base;
 use Bitrix\Main\EventManager;
 use Bitrix\Main\Loader;
+use Bitrix\Main\LoaderException;
 use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\ModuleManager;
 use Bitrix\Main\SystemException;
+use Rwb\Massops\Queue\ImportAgent;
+use Rwb\Massops\Queue\ImportJobTable;
 
 class rwb_massops extends CModule
 {
@@ -67,6 +70,7 @@ class rwb_massops extends CModule
      * Установка модуля rwb.massops
      *
      * @return bool
+     * @throws LoaderException
      */
     public function doInstall(): bool
     {
@@ -120,6 +124,7 @@ class rwb_massops extends CModule
      * Метод работает с настройками модуля и таблицами
      *
      * @return bool
+     * @throws LoaderException
      */
     public function installDB(): bool
     {
@@ -136,6 +141,7 @@ class rwb_massops extends CModule
      *
      * @return bool
      * @throws ArgumentNullException
+     * @throws LoaderException|ArgumentException
      */
     public function unInstallDB(): bool
     {
@@ -368,7 +374,7 @@ class rwb_massops extends CModule
     public function getOrmList(): array
     {
         return [
-            \Rwb\Massops\Queue\ImportJobTable::class,
+            ImportJobTable::class,
         ];
     }
 
@@ -378,7 +384,7 @@ class rwb_massops extends CModule
     private function installAgent(): void
     {
         \CAgent::AddAgent(
-            \Rwb\Massops\Queue\ImportAgent::getAgentName(),
+            ImportAgent::getAgentName(),
             $this->MODULE_ID,
             'N',
             30,
@@ -395,7 +401,7 @@ class rwb_massops extends CModule
     private function unInstallAgent(): void
     {
         \CAgent::RemoveAgent(
-            \Rwb\Massops\Queue\ImportAgent::getAgentName(),
+            ImportAgent::getAgentName(),
             $this->MODULE_ID
         );
     }
