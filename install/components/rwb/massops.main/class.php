@@ -619,8 +619,8 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $filename = $entityType . '_import_template.xlsx';
 
         XlsxTemplateExporter::export(
-            $repository->getFieldList(),
-            $repository->getRequiredFieldCodes(),
+            $repository->getFieldsForTemplate(),
+            $entityType,
             $filename
         );
     }

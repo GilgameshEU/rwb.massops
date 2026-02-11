@@ -253,4 +253,235 @@ final class CrmRepository
     {
         return $this->getFactory()->getFieldsInfo();
     }
+
+    /**
+     * Возвращает полную информацию о полях для шаблона импорта
+     *
+     * @return array<string, array{
+     *     code: string,
+     *     title: string,
+     *     required: bool,
+     *     type: string,
+     *     enumValues: array|null
+     * }>
+     * @throws LoaderException
+     */
+    public function getFieldsForTemplate(): array
+    {
+        $result = [];
+        $fields = $this->getFactory()->getFieldsCollection();
+        $fieldsInfo = $this->getFieldsInfo();
+        $ufFieldsInfo = $this->getUfFieldsInfo();
+
+        foreach ($fields as $field) {
+            if ($this->isFieldExcluded($field)) {
+                continue;
+            }
+
+            $fieldName = $field->getName();
+
+            // Мультиполя (телефон, email)
+            if ($fieldName === Item::FIELD_NAME_FM) {
+                $result['PHONE'] = [
+                    'code' => 'PHONE',
+                    'title' => 'Телефон',
+                    'required' => false,
+                    'type' => 'Строка',
+                    'enumValues' => null,
+                ];
+                $result['EMAIL'] = [
+                    'code' => 'EMAIL',
+                    'title' => 'E-mail',
+                    'required' => false,
+                    'type' => 'Строка',
+                    'enumValues' => null,
+                ];
+                continue;
+            }
+
+            // Для UF полей берём информацию из CUserTypeEntity
+            $extendedFieldInfo = $fieldsInfo[$fieldName] ?? [];
+            if (str_starts_with($fieldName, 'UF_') && isset($ufFieldsInfo[$fieldName])) {
+                $extendedFieldInfo = array_merge($extendedFieldInfo, $ufFieldsInfo[$fieldName]);
+            }
+
+            $fieldType = $this->resolveFieldType($field, $extendedFieldInfo);
+            $enumValues = $this->getEnumValues($field, $extendedFieldInfo);
+
+            $result[$fieldName] = [
+                'code' => $fieldName,
+                'title' => $field->getTitle(),
+                'required' => $field->isRequired(),
+                'type' => $fieldType,
+                'enumValues' => $enumValues,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Получает информацию о пользовательских полях из CUserTypeEntity
+     *
+     * @return array<string, array>
+     */
+    private function getUfFieldsInfo(): array
+    {
+        $entityId = 'CRM_' . strtoupper($this->entityType->value);
+        $result = [];
+
+        $rsFields = \CUserTypeEntity::GetList(
+            [],
+            ['ENTITY_ID' => $entityId]
+        );
+
+        while ($field = $rsFields->Fetch()) {
+            $result[$field['FIELD_NAME']] = $field;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Определяет человекочитаемый тип поля
+     */
+    private function resolveFieldType(object $field, array $fieldInfo): string
+    {
+        $type = $field->getType();
+
+        $typeMap = [
+            Field::TYPE_STRING => 'Строка',
+            Field::TYPE_TEXT => 'Текст',
+            Field::TYPE_CHAR => 'Символ',
+            Field::TYPE_INTEGER => 'Целое число',
+            Field::TYPE_DOUBLE => 'Число',
+            Field::TYPE_BOOLEAN => 'Да/Нет',
+            Field::TYPE_DATE => 'Дата',
+            Field::TYPE_DATETIME => 'Дата и время',
+            Field::TYPE_USER => 'Пользователь',
+            Field::TYPE_LOCATION => 'Местоположение',
+            Field::TYPE_CRM_STATUS => 'Справочник',
+            Field::TYPE_CRM_CURRENCY => 'Валюта',
+            Field::TYPE_CRM_COMPANY => 'Компания',
+            Field::TYPE_CRM_CONTACT => 'Контакт',
+            Field::TYPE_CRM_DEAL => 'Сделка',
+            Field::TYPE_CRM_LEAD => 'Лид',
+            Field::TYPE_CRM_QUOTE => 'Предложение',
+            Field::TYPE_CRM_CATEGORY => 'Направление',
+            Field::TYPE_CRM_PRODUCT_ROW => 'Товар',
+            Field::TYPE_CRM_ENTITY => 'Сущность CRM',
+            Field::TYPE_CRM_MULTIFIELD => 'Мультиполе',
+            Field::TYPE_CRM_DYNAMIC_TYPE => 'Смарт-процесс',
+        ];
+
+        if (isset($typeMap[$type])) {
+            return $typeMap[$type];
+        }
+
+        // Для UF полей
+        if (str_starts_with($field->getName(), 'UF_')) {
+            $userType = $fieldInfo['USER_TYPE_ID'] ?? $fieldInfo['TYPE'] ?? null;
+
+            $ufTypeMap = [
+                'string' => 'Строка',
+                'integer' => 'Целое число',
+                'double' => 'Число',
+                'boolean' => 'Да/Нет',
+                'date' => 'Дата',
+                'datetime' => 'Дата и время',
+                'enumeration' => 'Список',
+                'employee' => 'Сотрудник',
+                'crm' => 'Привязка к CRM',
+                'crm_status' => 'Справочник CRM',
+                'money' => 'Деньги',
+                'url' => 'Ссылка',
+                'address' => 'Адрес',
+                'iblock_element' => 'Элемент инфоблока',
+                'iblock_section' => 'Раздел инфоблока',
+            ];
+
+            if (isset($ufTypeMap[$userType])) {
+                return $ufTypeMap[$userType];
+            }
+        }
+
+        return 'Строка';
+    }
+
+    /**
+     * Получает значения enum для списочных полей
+     */
+    private function getEnumValues(object $field, array $fieldInfo): ?array
+    {
+        $type = $field->getType();
+        $fieldName = $field->getName();
+
+        // CRM статусы (SOURCE_ID, INDUSTRY и т.п.)
+        if ($type === Field::TYPE_CRM_STATUS) {
+            $statusEntityId = $fieldInfo['CRM_STATUS_TYPE'] ?? null;
+            if ($statusEntityId) {
+                return $this->getCrmStatusItems($statusEntityId);
+            }
+        }
+
+        // UF поля типа enumeration
+        if (str_starts_with($fieldName, 'UF_')) {
+            $userType = $fieldInfo['USER_TYPE_ID'] ?? $fieldInfo['TYPE'] ?? null;
+
+            if ($userType === 'enumeration') {
+                return $this->getUfEnumItems($fieldName);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Получает элементы справочника CRM
+     */
+    private function getCrmStatusItems(string $entityId): array
+    {
+        $items = [];
+
+        $statuses = \CCrmStatus::GetStatusList($entityId);
+        foreach ($statuses as $statusId => $statusName) {
+            $items[] = [
+                'id' => $statusId,
+                'value' => $statusName,
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * Получает значения enum для UF поля
+     */
+    private function getUfEnumItems(string $fieldName): array
+    {
+        $items = [];
+
+        $entityId = 'CRM_' . strtoupper($this->entityType->value);
+
+        $rsField = \CUserTypeEntity::GetList(
+            [],
+            ['ENTITY_ID' => $entityId, 'FIELD_NAME' => $fieldName]
+        );
+
+        if ($field = $rsField->Fetch()) {
+            $rsEnum = \CUserFieldEnum::GetList(
+                ['SORT' => 'ASC'],
+                ['USER_FIELD_ID' => $field['ID']]
+            );
+
+            while ($enum = $rsEnum->Fetch()) {
+                $items[] = [
+                    'id' => $enum['XML_ID'] ?: $enum['ID'],
+                    'value' => $enum['VALUE'],
+                ];
+            }
+        }
+
+        return $items;
+    }
 }
