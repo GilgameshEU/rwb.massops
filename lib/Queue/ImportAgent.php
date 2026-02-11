@@ -38,14 +38,12 @@ class ImportAgent
             ])->fetch();
 
             if (!$job) {
-                // Нет задач — ждём следующего тика
                 return self::getAgentName();
             }
 
             $processor = new ImportProcessor();
             $processor->processBatch((int) $job['ID']);
         } catch (Exception $e) {
-            // Логируем ошибку в event log Битрикс
             Application::getInstance()
                 ->getExceptionHandler()
                 ->writeToLog($e);

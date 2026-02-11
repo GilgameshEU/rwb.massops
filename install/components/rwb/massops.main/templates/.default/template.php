@@ -88,12 +88,18 @@ $svgIcons = [
                 <!-- Шаг 1: Выбор сущности -->
                 <div class="rwb-wizard__panel rwb-wizard__panel--active" data-panel="1">
                     <div class="rwb-entity-cards">
-                        <?php foreach ($entityTypes as $key => $entity): ?>
-                            <div class="rwb-entity-card" data-entity="<?= htmlspecialchars($key) ?>">
+                        <?php foreach ($entityTypes as $key => $entity):
+                            $isDisabled = !empty($entity['disabled']);
+                            $cardClass = 'rwb-entity-card' . ($isDisabled ? ' rwb-entity-card--disabled' : '');
+                        ?>
+                            <div class="<?= $cardClass ?>" data-entity="<?= htmlspecialchars($key) ?>"<?= $isDisabled ? ' data-disabled="true"' : '' ?>>
                                 <div class="rwb-entity-card__icon">
                                     <?= $svgIcons[$entity['icon']] ?? '' ?>
                                 </div>
                                 <div class="rwb-entity-card__title"><?= htmlspecialchars($entity['title']) ?></div>
+                                <?php if ($isDisabled): ?>
+                                    <div class="rwb-entity-card__badge">скоро</div>
+                                <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
@@ -141,6 +147,12 @@ $svgIcons = [
                                 <input type="checkbox" class="rwb-toggle__input" id="rwb-import-dry-run" checked>
                                 <span class="rwb-toggle__track"></span>
                                 <span class="rwb-toggle__label">Dry Run (тестовый режим)</span>
+                            </label>
+
+                            <label class="rwb-toggle" id="rwb-create-cabinets-wrap" style="display: none;">
+                                <input type="checkbox" class="rwb-toggle__input" id="rwb-create-cabinets">
+                                <span class="rwb-toggle__track"></span>
+                                <span class="rwb-toggle__label">Создать кабинеты</span>
                             </label>
 
                             <button class="ui-btn ui-btn-primary ui-btn-sm" id="rwb-import-run">Проверить</button>
@@ -220,17 +232,16 @@ $svgIcons = [
                     <table class="rwb-stats__table" id="rwb-stats-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
                                 <th>Пользователь</th>
                                 <th>Сущность</th>
                                 <th>Статус</th>
                                 <th>Всего</th>
                                 <th>Успешно</th>
                                 <th>Ошибок</th>
-                                <th>Добавлено (ID)</th>
                                 <th>Создано</th>
                                 <th>Начало</th>
                                 <th>Завершено</th>
+                                <th>Отчёт</th>
                             </tr>
                         </thead>
                         <tbody id="rwb-stats-tbody"></tbody>

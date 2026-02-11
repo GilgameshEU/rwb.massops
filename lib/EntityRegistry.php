@@ -26,18 +26,21 @@ final class EntityRegistry
             'icon' => 'building',
             'entityType' => EntityType::Company,
             'importClass' => null,
+            'disabled' => false,
         ],
         'contact' => [
             'title' => 'Контакты',
             'icon' => 'person',
             'entityType' => EntityType::Contact,
             'importClass' => ContactImportService::class,
+            'disabled' => true, // Временно отключено
         ],
         'deal' => [
             'title' => 'Сделки',
             'icon' => 'handshake',
             'entityType' => EntityType::Deal,
             'importClass' => null,
+            'disabled' => true, // Временно отключено
         ],
     ];
 
@@ -66,7 +69,7 @@ final class EntityRegistry
     /**
      * Возвращает все сущности для отображения в UI
      *
-     * @return array<string, array{title: string, icon: string}>
+     * @return array<string, array{title: string, icon: string, disabled: bool}>
      */
     public static function getAllForUi(): array
     {
@@ -75,6 +78,7 @@ final class EntityRegistry
             $result[$key] = [
                 'title' => $config['title'],
                 'icon' => $config['icon'],
+                'disabled' => $config['disabled'] ?? false,
             ];
         }
 

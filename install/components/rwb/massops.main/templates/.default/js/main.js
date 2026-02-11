@@ -21,6 +21,15 @@ BX.ready(function () {
     var importBtn = BX('rwb-import-run');
     var templateLink = BX('rwb-import-template');
     var dryRunToggle = BX('rwb-import-dry-run');
+    var createCabinetsWrap = BX('rwb-create-cabinets-wrap');
+    var createCabinetsToggle = BX('rwb-create-cabinets');
+
+    // Функция показа/скрытия чекбокса кабинетов
+    function updateCabinetsCheckbox(entityType) {
+        if (createCabinetsWrap) {
+            createCabinetsWrap.style.display = (entityType === 'company') ? '' : 'none';
+        }
+    }
 
     // --- 1. Табы ---
     window.RwbTabManager.init();
@@ -39,11 +48,14 @@ BX.ready(function () {
         if (nextBtn1) {
             nextBtn1.disabled = false;
         }
+        // Показать/скрыть чекбокс кабинетов
+        updateCabinetsCheckbox(entityType);
     }, config.currentEntityType);
 
-    // Если есть предвыбранная сущность — активировать кнопку
+    // Если есть предвыбранная сущность — активировать кнопку и чекбокс
     if (config.currentEntityType && nextBtn1) {
         nextBtn1.disabled = false;
+        updateCabinetsCheckbox(config.currentEntityType);
     }
 
     // --- 4. Dropzone ---
@@ -100,11 +112,28 @@ BX.ready(function () {
         window.RwbImportImportHandler.init(importBtn, getEntityType);
     }
 
-    // --- 9. Dry Run toggle — меняет текст кнопки ---
+    // --- 9. Dry Run toggle — меняет текст кнопки и управляет чекбоксом кабинетов ---
+    function updateCabinetsDisabledState() {
+        if (createCabinetsToggle) {
+            var isDryRun = dryRunToggle && dryRunToggle.checked;
+            createCabinetsToggle.disabled = isDryRun;
+            if (isDryRun) {
+                createCabinetsToggle.checked = false;
+            }
+            // Визуально показываем неактивное состояние
+            if (createCabinetsWrap) {
+                createCabinetsWrap.classList.toggle('rwb-toggle--disabled', isDryRun);
+            }
+        }
+    }
+
     if (dryRunToggle && importBtn) {
         dryRunToggle.addEventListener('change', function () {
             importBtn.textContent = dryRunToggle.checked ? 'Проверить' : 'Импортировать';
+            updateCabinetsDisabledState();
         });
+        // Инициализация при загрузке
+        updateCabinetsDisabledState();
     }
 
     // --- 10. Clear ---

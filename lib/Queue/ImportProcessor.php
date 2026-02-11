@@ -6,7 +6,6 @@ use Bitrix\Main\Config\Option;
 use Bitrix\Main\Loader;
 use Bitrix\Main\Type\DateTime;
 use Rwb\Massops\EntityRegistry;
-use Rwb\Massops\Import\ImportMode;
 use RuntimeException;
 
 /**
@@ -75,6 +74,12 @@ class ImportProcessor
         $totalRows = (int) $job['TOTAL_ROWS'];
         $batchSize = $this->getBatchSize();
 
+        // Десериализация опций импорта
+        $options = [];
+        if (!empty($job['IMPORT_OPTIONS'])) {
+            $options = unserialize($job['IMPORT_OPTIONS']);
+        }
+
         $endIndex = min($startIndex + $batchSize, $totalRows);
 
         // Вырезаем пачку строк (с сохранением ключей)
@@ -84,9 +89,9 @@ class ImportProcessor
             $batchRows[$i] = $allRowsIndexed[$i];
         }
 
-        // Обработка пачки через ImportService
+        // Обработка пачки через ImportService с опциями
         $importService = EntityRegistry::createImportService($entityType);
-        $result = $importService->import($batchRows);
+        $result = $importService->import($batchRows, $options);
 
         // Накопление ошибок
         $existingErrors = !empty($job['ERRORS_DATA'])

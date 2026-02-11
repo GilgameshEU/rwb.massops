@@ -4,9 +4,6 @@
 (function () {
     'use strict';
 
-    /** Сколько ID показывать без раскрытия */
-    var IDS_PREVIEW_COUNT = 5;
-
     window.RwbStatsHandler = {
         _currentPage: 1,
         _totalPages: 1,
@@ -75,7 +72,6 @@
 
                 // Простые ячейки (текст / HTML)
                 var simpleCells = [
-                    { text: item.id },
                     { text: item.userName },
                     { text: item.entityTitle },
                     { html: self._renderStatusBadge(item.status) },
@@ -94,11 +90,6 @@
                     tr.appendChild(td);
                 });
 
-                // Ячейка «Добавлено» — раскрывающийся список ID
-                var idsTd = document.createElement('td');
-                idsTd.innerHTML = self._renderCreatedIds(item.createdIds || [], item.entityType);
-                tr.appendChild(idsTd);
-
                 // Даты
                 var dateCells = [
                     self._formatDate(item.createdAt),
@@ -112,86 +103,60 @@
                     tr.appendChild(td);
                 });
 
+                // Кнопка скачивания отчёта
+                var reportTd = document.createElement('td');
+                reportTd.innerHTML = self._renderDownloadButton(item);
+                tr.appendChild(reportTd);
+
                 tbody.appendChild(tr);
             });
         },
 
         /**
-         * Возвращает HTML для списка созданных ID
+         * Рендерит кнопку скачивания отчёта
          *
-         * До IDS_PREVIEW_COUNT — показываем все.
-         * Больше — показываем первые N и кнопку «ещё X».
-         * По клику раскрывается полный список.
-         *
-         * @param {Array} ids
-         * @param {string} entityType
+         * @param {Object} item
          * @returns {string}
          */
-        _renderCreatedIds: function (ids, entityType) {
-            if (!ids || ids.length === 0) {
+        _renderDownloadButton: function (item) {
+            // Показываем кнопку только для завершённых задач
+            if (item.status !== 'completed' && item.status !== 'error') {
                 return '\u2014';
             }
 
-            var crmPath = this._getCrmPath(entityType);
-
-            // Мало ID — показываем все
-            if (ids.length <= IDS_PREVIEW_COUNT) {
-                return this._renderIdLinks(ids, crmPath);
-            }
-
-            // Много — показываем превью + кнопку раскрытия
-            var previewIds = ids.slice(0, IDS_PREVIEW_COUNT);
-            var restIds = ids.slice(IDS_PREVIEW_COUNT);
-            var uid = 'rwb-ids-' + Math.random().toString(36).substr(2, 8);
-
-            var html = '<span class="rwb-stats__ids">';
-            html += this._renderIdLinks(previewIds, crmPath);
-            html += '<span class="rwb-stats__ids-rest" id="' + uid + '" style="display:none;">';
-            html += ', ' + this._renderIdLinks(restIds, crmPath);
-            html += '</span>';
-            html += ' <a class="rwb-stats__ids-toggle" href="javascript:void(0)" '
-                + 'onclick="var el=document.getElementById(\'' + uid + '\');'
-                + 'el.style.display=el.style.display===\'none\'?\'inline\':\'none\';'
-                + 'this.textContent=el.style.display===\'none\''
-                + '?\'\u0435\u0449\u0451 ' + restIds.length + '\''
-                + ':\'\u0441\u043a\u0440\u044b\u0442\u044c\';">'
-                + '\u0435\u0449\u0451 ' + restIds.length + '</a>';
-            html += '</span>';
-
-            return html;
+            return '<button class="ui-btn ui-btn-xs ui-btn-light-border rwb-stats__download-btn" '
+                + 'onclick="RwbStatsHandler.downloadReport(' + item.id + ')" '
+                + 'title="Скачать отчёт">'
+                + '\u2193 XLSX'
+                + '</button>';
         },
 
         /**
-         * Рендерит ссылки на ID сущностей
+         * Скачивает отчёт по задаче импорта
          *
-         * @param {Array} ids
-         * @param {string} crmPath
-         * @returns {string}
+         * @param {number} jobId
          */
-        _renderIdLinks: function (ids, crmPath) {
-            if (!crmPath) {
-                return ids.join(', ');
-            }
+        downloadReport: function (jobId) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/bitrix/services/main/ajax.php?c=rwb:massops.main&action=downloadStatsReport&mode=class';
+            form.style.display = 'none';
 
-            return ids.map(function (id) {
-                return '<a class="rwb-stats__id-link" href="' + crmPath + id + '/" target="_blank">'
-                    + id + '</a>';
-            }).join(', ');
-        },
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'jobId';
+            input.value = jobId;
+            form.appendChild(input);
 
-        /**
-         * Возвращает путь CRM для типа сущности
-         *
-         * @param {string} entityType
-         * @returns {string}
-         */
-        _getCrmPath: function (entityType) {
-            var paths = {
-                'company': '/crm/company/details/',
-                'contact': '/crm/contact/details/',
-                'deal': '/crm/deal/details/'
-            };
-            return paths[entityType] || '';
+            var sessidInput = document.createElement('input');
+            sessidInput.type = 'hidden';
+            sessidInput.name = 'sessid';
+            sessidInput.value = BX.bitrix_sessid();
+            form.appendChild(sessidInput);
+
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
         },
 
         /**

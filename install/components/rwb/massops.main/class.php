@@ -20,6 +20,7 @@ use Rwb\Massops\Queue\ImportJobTable;
 use Rwb\Massops\Support\ErrorReportExporter;
 use Rwb\Massops\Support\GridDataConverter;
 use Rwb\Massops\Support\SessionStorage;
+use Rwb\Massops\Support\StatsReportExporter;
 use Rwb\Massops\Support\XlsxTemplateExporter;
 
 /**
@@ -61,6 +62,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'getProgress' => ['prefilters' => []],
             'getStats' => ['prefilters' => []],
             'downloadErrorReport' => ['prefilters' => []],
+            'downloadStatsReport' => ['prefilters' => []],
             // Обратная совместимость
             'importCompanies' => ['prefilters' => []],
             'dryRunImport' => ['prefilters' => []],
@@ -299,11 +301,21 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         }
 
         $entityType = $this->resolveEntityType();
+        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
+        $createCabinets = $request->getPost('createCabinets') === 'Y';
+
         $importService = EntityRegistry::createImportService($entityType);
+
+        // Передаём опции для компаний
+        $options = [];
+        if ($entityType === 'company' && $createCabinets) {
+            $options['createCabinets'] = true;
+        }
 
         try {
             $result = $importService->dryRun(
-                SessionStorage::getRows()
+                SessionStorage::getRows(),
+                $options
             );
         } catch (ArgumentException|LoaderException $e) {
             return [
@@ -354,12 +366,22 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $entityType = $this->resolveEntityType();
         $rows = SessionStorage::getRows();
 
+        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
+        $createCabinets = $request->getPost('createCabinets') === 'Y';
+
+        // Формируем опции импорта
+        $options = [];
+        if ($entityType === 'company' && $createCabinets) {
+            $options['createCabinets'] = true;
+        }
+
         $result = ImportJobTable::add([
             'USER_ID' => (int) CurrentUser::get()->getId(),
             'ENTITY_TYPE' => $entityType,
             'STATUS' => ImportJobStatus::Pending->value,
             'TOTAL_ROWS' => count($rows),
             'IMPORT_DATA' => serialize($rows),
+            'IMPORT_OPTIONS' => !empty($options) ? serialize($options) : null,
         ]);
 
         if (!$result->isSuccess()) {
@@ -632,5 +654,44 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $filename = $entityType . '_errors_' . date('Y-m-d_H-i') . '.xlsx';
 
         ErrorReportExporter::export($columns, $rows, $errors, $filename);
+    }
+
+    /**
+     * Скачивает XLSX-отчёт по задаче импорта из статистики
+     *
+     * Ожидает POST-данные:
+     * - jobId: ID задачи импорта
+     *
+     * @throws AccessDeniedException
+     */
+    public function downloadStatsReportAction(): void
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new AccessDeniedException();
+        }
+
+        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
+        $jobId = (int)$request->getPost('jobId');
+
+        if (!$jobId) {
+            throw new RuntimeException('Job ID не указан');
+        }
+
+        $job = ImportJobTable::getById($jobId)->fetch();
+
+        if (!$job) {
+            throw new RuntimeException('Задача не найдена');
+        }
+
+        // Маппинг типов сущностей в названия
+        $entityTitles = [];
+        foreach (EntityRegistry::getAllForUi() as $key => $config) {
+            $entityTitles[$key] = $config['title'];
+        }
+
+        $entityTitle = $entityTitles[$job['ENTITY_TYPE']] ?? $job['ENTITY_TYPE'];
+        $filename = $job['ENTITY_TYPE'] . '_import_report_' . $jobId . '.xlsx';
+
+        StatsReportExporter::export($job, $entityTitle, $filename);
     }
 }

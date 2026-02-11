@@ -53,6 +53,9 @@ class ImportJobTable extends Entity\DataManager
             new Entity\TextField('IMPORT_DATA', [
                 'required' => true,
             ]),
+            new Entity\TextField('IMPORT_OPTIONS', [
+                'nullable' => true,
+            ]),
             new Entity\DatetimeField('CREATED_AT', [
                 'required' => true,
                 'default_value' => static fn() => new DateTime(),

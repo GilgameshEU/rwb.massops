@@ -22,12 +22,20 @@
             var self = this;
             this._cards.forEach(function (card) {
                 card.addEventListener('click', function () {
+                    // Не выбираем disabled карточки
+                    if (card.getAttribute('data-disabled') === 'true') {
+                        return;
+                    }
                     self.select(card.getAttribute('data-entity'));
                 });
             });
 
             if (preselected) {
-                this.select(preselected);
+                // Проверяем, не disabled ли предвыбранная сущность
+                var preselectedCard = document.querySelector('.rwb-entity-card[data-entity="' + preselected + '"]');
+                if (preselectedCard && preselectedCard.getAttribute('data-disabled') !== 'true') {
+                    this.select(preselected);
+                }
             }
         },
 
@@ -37,6 +45,12 @@
          * @param {string} entityType Тип сущности
          */
         select: function (entityType) {
+            // Проверяем, не disabled ли сущность
+            var card = document.querySelector('.rwb-entity-card[data-entity="' + entityType + '"]');
+            if (card && card.getAttribute('data-disabled') === 'true') {
+                return;
+            }
+
             this._selectedEntity = entityType;
 
             // Обновляем визуальное состояние

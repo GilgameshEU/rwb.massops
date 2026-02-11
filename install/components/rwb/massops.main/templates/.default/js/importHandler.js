@@ -29,6 +29,10 @@
             var dryRunToggle = BX('rwb-import-dry-run');
             var isDryRun = dryRunToggle && dryRunToggle.checked;
 
+            // Получаем состояние чекбокса кабинетов (только для компаний)
+            var createCabinetsToggle = BX('rwb-create-cabinets');
+            var createCabinets = createCabinetsToggle && createCabinetsToggle.checked;
+
             var loadingText = isDryRun ? 'Проверка...' : 'Запуск импорта...';
             this.setLoading(importBtn, true, loadingText);
 
@@ -36,19 +40,19 @@
             var container = document.getElementById('rwb-results-container');
 
             if (isDryRun) {
-                this._runDryRun(importBtn, originalText, entityType, container);
+                this._runDryRun(importBtn, originalText, entityType, container, createCabinets);
             } else {
-                this._runAsyncImport(importBtn, originalText, entityType, container);
+                this._runAsyncImport(importBtn, originalText, entityType, container, createCabinets);
             }
         },
 
         /**
          * Синхронный dry run
          */
-        _runDryRun: function (importBtn, originalText, entityType, container) {
+        _runDryRun: function (importBtn, originalText, entityType, container, createCabinets) {
             BX.ajax.runComponentAction('rwb:massops.main', 'runDryRun', {
                 mode: 'class',
-                data: {entityType: entityType}
+                data: {entityType: entityType, createCabinets: createCabinets ? 'Y' : 'N'}
             }).then(function (response) {
                 this.setLoading(importBtn, false, originalText);
 
@@ -76,10 +80,10 @@
         /**
          * Асинхронный импорт через очередь
          */
-        _runAsyncImport: function (importBtn, originalText, entityType, container) {
+        _runAsyncImport: function (importBtn, originalText, entityType, container, createCabinets) {
             BX.ajax.runComponentAction('rwb:massops.main', 'startImport', {
                 mode: 'class',
-                data: {entityType: entityType}
+                data: {entityType: entityType, createCabinets: createCabinets ? 'Y' : 'N'}
             }).then(function (response) {
                 var jobId = response.data.jobId;
 
@@ -121,11 +125,17 @@
          */
         _collectErrors: function (errorsObj) {
             var allErrors = [];
-            if (errorsObj && Object.keys(errorsObj).length > 0) {
+            if (errorsObj && typeof errorsObj === 'object') {
                 Object.keys(errorsObj).forEach(function (rowIndex) {
-                    errorsObj[rowIndex].forEach(function (error) {
-                        allErrors.push(error);
-                    });
+                    var rowErrors = errorsObj[rowIndex];
+                    if (Array.isArray(rowErrors)) {
+                        rowErrors.forEach(function (error) {
+                            allErrors.push(error);
+                        });
+                    } else if (rowErrors && typeof rowErrors === 'object') {
+                        // Если это объект, а не массив
+                        allErrors.push(rowErrors);
+                    }
                 });
             }
             return allErrors;

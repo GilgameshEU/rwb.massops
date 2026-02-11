@@ -262,6 +262,33 @@
     color: #3F51B5;
 }
 
+/* Disabled карточки сущностей */
+.rwb-entity-card--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    position: relative;
+}
+
+.rwb-entity-card--disabled:hover {
+    border-color: #e0e2eb;
+    background: #f8f9fa;
+    transform: none;
+}
+
+.rwb-entity-card__badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    background: #c5c7d0;
+    border-radius: 3px;
+    padding: 2px 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
 /* ===== Dropzone ===== */
 
 .rwb-dropzone {
@@ -432,6 +459,17 @@
     font-size: 13px;
     font-weight: 500;
     color: #525672;
+}
+
+/* Неактивный toggle */
+.rwb-toggle--disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.rwb-toggle__input:disabled + .rwb-toggle__track {
+    background: #d0d2db;
+    cursor: not-allowed;
 }
 
 /* ===== Placeholder (скоро) ===== */

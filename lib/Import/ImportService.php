@@ -12,6 +12,7 @@ use RuntimeException;
 use Rwb\Massops\Import\Parser\CsvParser;
 use Rwb\Massops\Import\Parser\XlsxParser;
 use Rwb\Massops\Repository\CrmRepository;
+use Rwb\Massops\Support\UserFieldHelper;
 
 /**
  * Сервис импорта данных CRM
@@ -32,14 +33,15 @@ class ImportService
     /**
      * Выполняет импорт данных
      *
-     * @param array $rows Данные для импорта
+     * @param array $rows    Данные для импорта
+     * @param array $options Дополнительные опции импорта
      *
      * @return array{success: int, errors: array, added: array}
      * @throws LoaderException|ArgumentException|InvalidOperationException
      */
-    public function import(array $rows): array
+    public function import(array $rows, array $options = []): array
     {
-        $result = $this->processRows($rows, ImportMode::Import);
+        $result = $this->processRows($rows, ImportMode::Import, $options);
 
         return [
             'success' => $result['success'],
@@ -51,14 +53,15 @@ class ImportService
     /**
      * Выполняет dry run импорта (симуляция без сохранения)
      *
-     * @param array $rows Данные для импорта
+     * @param array $rows    Данные для импорта
+     * @param array $options Дополнительные опции импорта
      *
      * @return array{success: int, errors: array, wouldBeAdded: array}
      * @throws LoaderException|ArgumentException|InvalidOperationException
      */
-    public function dryRun(array $rows): array
+    public function dryRun(array $rows, array $options = []): array
     {
-        $result = $this->processRows($rows, ImportMode::DryRun);
+        $result = $this->processRows($rows, ImportMode::DryRun, $options);
 
         return [
             'success' => $result['success'],
@@ -72,11 +75,12 @@ class ImportService
      *
      * @param array $rows       Данные строк
      * @param ImportMode $mode  Режим импорта
+     * @param array $options    Дополнительные опции
      *
      * @return array{success: int, errors: array, items: array}
      * @throws LoaderException|ArgumentException|InvalidOperationException
      */
-    protected function processRows(array $rows, ImportMode $mode): array
+    protected function processRows(array $rows, ImportMode $mode, array $options = []): array
     {
         $fieldCodes = array_keys(
             $this->repository->getFieldList()
@@ -101,6 +105,9 @@ class ImportService
             $fields = $normalized->fields;
             $uf = $normalized->uf;
             $fm = $normalized->fm;
+
+            // Применяем опции импорта
+            $this->applyImportOptions($uf, $options);
 
             $hasErrors = false;
 
@@ -198,5 +205,22 @@ class ImportService
     protected function validateRow(array $fields, array $uf, array $fm): ValidationResult
     {
         return new ValidationResult();
+    }
+
+    /**
+     * Применяет опции импорта к пользовательским полям
+     *
+     * @param array $uf      Ссылка на массив пользовательских полей
+     * @param array $options Опции импорта
+     */
+    protected function applyImportOptions(array &$uf, array $options): void
+    {
+        // Опция createCabinets: добавить need_suppliers в поле COMMENTS компании (множественное поле)
+        if (!empty($options['createCabinets'])) {
+            $fieldCode = UserFieldHelper::getCompanyCommentsField();
+            if ($fieldCode) {
+                $uf[$fieldCode] = ['need_suppliers'];
+            }
+        }
     }
 }
