@@ -4,6 +4,8 @@ if (class_exists('rwb_massops')) {
     return;
 }
 
+use Bitrix\Intranet\CustomSection\Entity\CustomSectionPageTable;
+use Bitrix\Intranet\CustomSection\Entity\CustomSectionTable;
 use Bitrix\Main\Application;
 use Bitrix\Main\ArgumentException;
 use Bitrix\Main\ArgumentNullException;
@@ -17,6 +19,7 @@ use Bitrix\Main\LoaderException;
 use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\ModuleManager;
 use Bitrix\Main\SystemException;
+use Rwb\Massops\Menu\MenuInstaller;
 use Rwb\Massops\Queue\ImportAgent;
 use Rwb\Massops\Queue\ImportJobTable;
 
@@ -84,6 +87,7 @@ class rwb_massops extends CModule
         $this->installDB();
         $this->installEvents();
         $this->installFiles();
+        $this->installMenu();
 
         return true;
     }
@@ -113,6 +117,7 @@ class rwb_massops extends CModule
             return true;
         }
 
+        $this->unInstallMenu();
         $this->unInstallFiles();
         $this->unInstallEvents();
         $this->unInstallDB();
@@ -203,14 +208,14 @@ class rwb_massops extends CModule
      */
     public function installFiles(): void
     {
-        CopyDirFiles(
+        copyDirFiles(
             $this->MODULE_FOLDER . '/install/components',
             Application::getDocumentRoot() . '/local/components',
             true,
             true
         );
 
-        CopyDirFiles(
+        copyDirFiles(
             $this->MODULE_FOLDER . '/install/public',
             Application::getDocumentRoot(),
             true,
@@ -408,20 +413,68 @@ class rwb_massops extends CModule
 
     /**
      * События из метода регистрируются в системе
-     * добавляем массив строк:
-     *
-     * Модуль
-     * Событие
-     * $this->MODULE_ID
-     * Класс::class обработчика
-     * МетодОбработчика
      *
      * @return array
      */
     private function getEventList(): array
     {
-        return [
-            // Пример: ['main', 'OnPageStart', $this->MODULE_ID, '\Rwb\Massops\Events', 'onPageStart'],
-        ];
+        return [];
+    }
+
+    /**
+     * Подготовка к установке меню
+     *
+     * Меню устанавливается автоматически при первом посещении
+     * страницы /massops/ администратором (см. MenuInstaller::installMenuOnce)
+     */
+    private function installMenu(): void
+    {
+        // Удаляем старые CustomSection записи, если остались от предыдущих версий
+        $this->cleanupOldCustomSection();
+    }
+
+    /**
+     * Удаляет пункт меню из левого меню Bitrix24
+     */
+    private function unInstallMenu(): void
+    {
+        // Удаляем старые CustomSection записи
+        $this->cleanupOldCustomSection();
+
+        // Удаляем пункт меню
+        MenuInstaller::uninstallMenu();
+    }
+
+    /**
+     * Удаляет старые записи CustomSection, созданные предыдущими версиями
+     */
+    private function cleanupOldCustomSection(): void
+    {
+        try {
+            if (!class_exists('\Bitrix\Intranet\CustomSection\Entity\CustomSectionTable')) {
+                return;
+            }
+
+            $sections = CustomSectionTable::getList([
+                'filter' => ['=CODE' => 'rwb_massops'],
+                'select' => ['ID'],
+            ]);
+
+            while ($section = $sections->fetch()) {
+                if (class_exists('\Bitrix\Intranet\CustomSection\Entity\CustomSectionPageTable')) {
+                    $pages = CustomSectionPageTable::getList([
+                        'filter' => ['=CUSTOM_SECTION_ID' => $section['ID']],
+                        'select' => ['ID'],
+                    ]);
+                    while ($page = $pages->fetch()) {
+                        CustomSectionPageTable::delete($page['ID']);
+                    }
+                }
+                CustomSectionTable::delete($section['ID']);
+            }
+
+            Option::delete($this->MODULE_ID, ['name' => 'custom_section_id']);
+        } catch (\Throwable $e) {
+        }
     }
 }

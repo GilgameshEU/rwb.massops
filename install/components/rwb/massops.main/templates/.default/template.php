@@ -174,6 +174,9 @@ $svgIcons = [
                                     'AJAX_OPTION_HISTORY' => 'N',
                                     'ALLOW_COLUMNS_SORT' => false,
                                     'ALLOW_COLUMNS_RESIZE' => true,
+                                    'ALLOW_SORT' => true,
+                                    'SORT' => $arResult['GRID_SORT']['by'] ?? '',
+                                    'SORT_VARS' => ['by' => 'by', 'order' => 'order'],
                                 ]
                             );
                             ?>

@@ -10,7 +10,7 @@ class GridDataConverter
     /**
      * Преобразует данные строк в формат для Bitrix грида
      *
-     * @param array $rows Массив строк данных
+     * @param array $rows           Массив строк данных
      * @param array|null $headerRow Первая строка (заголовки). Если null, будет взят первый элемент массива $rows
      *
      * @return array{columns: array, rows: array}
@@ -30,6 +30,7 @@ class GridDataConverter
             $columns[] = [
                 'id' => 'COL_' . $i,
                 'name' => (string) $name,
+                'sort' => 'COL_' . $i,
                 'default' => true,
             ];
         }
@@ -52,5 +53,41 @@ class GridDataConverter
             'columns' => $columns,
             'rows' => $gridRows,
         ];
+    }
+
+    /**
+     * Сортирует строки грида
+     *
+     * @param array $rows       Строки грида
+     * @param string $sortBy    ID колонки для сортировки
+     * @param string $sortOrder Направление (ASC/DESC)
+     *
+     * @return array Отсортированные строки
+     */
+    public static function sortRows(array $rows, string $sortBy, string $sortOrder = 'ASC'): array
+    {
+        if (empty($rows) || empty($sortBy)) {
+            return $rows;
+        }
+
+        usort($rows, function ($a, $b) use ($sortBy, $sortOrder) {
+            $valueA = $a['data'][$sortBy] ?? '';
+            $valueB = $b['data'][$sortBy] ?? '';
+
+            // Пробуем числовое сравнение
+            $numA = is_numeric($valueA) ? (float) $valueA : null;
+            $numB = is_numeric($valueB) ? (float) $valueB : null;
+
+            if ($numA !== null && $numB !== null) {
+                $result = $numA <=> $numB;
+            } else {
+                // Строковое сравнение с учётом локали
+                $result = strcasecmp($valueA, $valueB);
+            }
+
+            return strtoupper($sortOrder) === 'DESC' ? -$result : $result;
+        });
+
+        return $rows;
     }
 }

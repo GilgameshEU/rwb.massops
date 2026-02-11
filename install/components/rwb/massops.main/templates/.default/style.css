@@ -561,6 +561,10 @@
     font-size: 13px;
 }
 
+.rwb-result-download {
+    margin-top: 12px;
+}
+
 /* ===== Прогресс-бар импорта ===== */
 
 .rwb-progress {

@@ -17,6 +17,7 @@ use Rwb\Massops\Import\FieldValidator;
 use Rwb\Massops\Import\FileParser;
 use Rwb\Massops\Queue\ImportJobStatus;
 use Rwb\Massops\Queue\ImportJobTable;
+use Rwb\Massops\Support\ErrorReportExporter;
 use Rwb\Massops\Support\GridDataConverter;
 use Rwb\Massops\Support\SessionStorage;
 use Rwb\Massops\Support\XlsxTemplateExporter;
@@ -59,11 +60,14 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'startImport' => ['prefilters' => []],
             'getProgress' => ['prefilters' => []],
             'getStats' => ['prefilters' => []],
+            'downloadErrorReport' => ['prefilters' => []],
             // Обратная совместимость
             'importCompanies' => ['prefilters' => []],
             'dryRunImport' => ['prefilters' => []],
         ];
     }
+
+    private const GRID_ID = 'RWB_MASSOPS_GRID';
 
     /**
      * Основной метод выполнения компонента
@@ -80,9 +84,39 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $this->arResult['CURRENT_ENTITY_TYPE'] = SessionStorage::getEntityType();
         $this->arResult['HAS_DATA'] = SessionStorage::hasData();
         $this->arResult['GRID_COLUMNS'] = SessionStorage::getColumns();
-        $this->arResult['GRID_ROWS'] = SessionStorage::getRows();
+
+        // Получаем строки и применяем сортировку
+        $rows = SessionStorage::getRows();
+        $sort = $this->getGridSort();
+
+        if (!empty($sort['by']) && !empty($rows)) {
+            $rows = GridDataConverter::sortRows($rows, $sort['by'], $sort['order']);
+        }
+
+        $this->arResult['GRID_ROWS'] = $rows;
+        $this->arResult['GRID_SORT'] = $sort;
 
         $this->includeComponentTemplate();
+    }
+
+    /**
+     * Получает параметры сортировки грида
+     *
+     * @return array{by: string, order: string}
+     */
+    private function getGridSort(): array
+    {
+        $gridOptions = new \Bitrix\Main\Grid\Options(self::GRID_ID);
+        $sorting = $gridOptions->GetSorting([
+            'sort' => ['COL_0' => 'ASC'],
+            'vars' => ['by' => 'by', 'order' => 'order'],
+        ]);
+
+        $sort = $sorting['sort'] ?? [];
+        $by = key($sort) ?: '';
+        $order = current($sort) ?: 'ASC';
+
+        return ['by' => $by, 'order' => $order];
     }
 
     /**
@@ -567,5 +601,36 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             $repository->getRequiredFieldCodes(),
             $filename
         );
+    }
+
+    /**
+     * Скачивает XLSX-отчёт с ошибками dry-run
+     *
+     * Ожидает POST-данные:
+     * - errors: объект ошибок по строкам {rowIndex: [{message}, ...]}
+     *
+     * @throws AccessDeniedException
+     */
+    public function downloadErrorReportAction(): void
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new AccessDeniedException();
+        }
+
+        if (!SessionStorage::hasData()) {
+            throw new RuntimeException('Нет данных для экспорта');
+        }
+
+        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
+        $errorsJson = $request->getPost('errors');
+        $errors = $errorsJson ? json_decode($errorsJson, true) : [];
+
+        $columns = SessionStorage::getColumns();
+        $rows = SessionStorage::getRows();
+        $entityType = SessionStorage::getEntityType() ?: 'import';
+
+        $filename = $entityType . '_errors_' . date('Y-m-d_H-i') . '.xlsx';
+
+        ErrorReportExporter::export($columns, $rows, $errors, $filename);
     }
 }

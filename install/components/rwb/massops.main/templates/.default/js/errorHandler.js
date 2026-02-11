@@ -37,6 +37,7 @@
          * @param {boolean} isDryRun Флаг dry run
          */
         showImportErrors: function (allErrors, errorsByRow, successCount, container, isDryRun) {
+            var self = this;
             isDryRun = isDryRun || false;
 
             this.removeBlock('rwb-import-errors');
@@ -85,10 +86,53 @@
                     block.appendChild(summaryTitle);
                     block.appendChild(this.createList(summary));
                 }
+
+                // Кнопка скачивания отчёта с ошибками (только для dry-run с ошибками)
+                if (isDryRun) {
+                    var downloadBtn = BX.create('button', {
+                        props: {className: 'ui-btn ui-btn-light ui-btn-xs rwb-result-download'},
+                        text: 'Скачать отчёт с ошибками'
+                    });
+                    downloadBtn.onclick = function () {
+                        self.downloadErrorReport(errorsByRow);
+                    };
+                    block.appendChild(downloadBtn);
+                }
             }
 
             container.appendChild(block);
             block.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+        },
+
+        /**
+         * Скачивает XLSX-отчёт с ошибками
+         *
+         * @param {Object} errorsByRow Ошибки по строкам
+         */
+        downloadErrorReport: function (errorsByRow) {
+            // Создаём скрытую форму для POST-запроса на Bitrix AJAX endpoint
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/bitrix/services/main/ajax.php?c=rwb:massops.main&action=downloadErrorReport&mode=class';
+            form.style.display = 'none';
+
+            // Добавляем sessid
+            var sessidInput = document.createElement('input');
+            sessidInput.type = 'hidden';
+            sessidInput.name = 'sessid';
+            sessidInput.value = BX.bitrix_sessid();
+            form.appendChild(sessidInput);
+
+            // Добавляем ошибки как JSON
+            var errorsInput = document.createElement('input');
+            errorsInput.type = 'hidden';
+            errorsInput.name = 'errors';
+            errorsInput.value = JSON.stringify(errorsByRow);
+            form.appendChild(errorsInput);
+
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
         },
 
         /**
