@@ -27,6 +27,13 @@ class XlsxTemplateExporter
     ];
 
     /**
+     * Обязательные UF-поля по XML_ID для каждого типа сущности
+     */
+    private const EXTRA_REQUIRED_UF_XML_IDS = [
+        'company' => ['INN'],
+    ];
+
+    /**
      * Создаёт и отдаёт XLSX-шаблон для импорта
      *
      * @param array  $fieldsData  Полные данные о полях из getFieldsForTemplate()
@@ -37,13 +44,16 @@ class XlsxTemplateExporter
     {
         $spreadsheet = new Spreadsheet();
 
-        // Определяем обязательные поля
+        // Определяем обязательные поля (статические + динамические UF)
         $extraRequired = self::EXTRA_REQUIRED_FIELDS[$entityType] ?? [];
+        $extraRequiredUf = self::getExtraRequiredUfCodes($entityType);
+        $allExtraRequired = array_merge($extraRequired, $extraRequiredUf);
+
         $requiredFields = [];
         $optionalFields = [];
 
         foreach ($fieldsData as $code => $field) {
-            $isRequired = $field['required'] || in_array($code, $extraRequired, true);
+            $isRequired = $field['required'] || in_array($code, $allExtraRequired, true);
             $field['required'] = $isRequired;
 
             if ($isRequired) {
@@ -215,6 +225,39 @@ class XlsxTemplateExporter
         $comment->getText()->createTextRun('Обязательное поле');
         $comment->setWidth('220px');
         $comment->setHeight('60px');
+    }
+
+    /**
+     * Возвращает коды UF-полей, которые обязательны по XML_ID
+     */
+    private static function getExtraRequiredUfCodes(string $entityType): array
+    {
+        $xmlIds = self::EXTRA_REQUIRED_UF_XML_IDS[$entityType] ?? [];
+
+        if (empty($xmlIds)) {
+            return [];
+        }
+
+        $entityId = match ($entityType) {
+            'company' => 'CRM_COMPANY',
+            'contact' => 'CRM_CONTACT',
+            'deal' => 'CRM_DEAL',
+            default => null,
+        };
+
+        if (!$entityId) {
+            return [];
+        }
+
+        $codes = [];
+        foreach ($xmlIds as $xmlId) {
+            $code = UserFieldHelper::getFieldCodeByXmlId($entityId, $xmlId);
+            if ($code) {
+                $codes[] = $code;
+            }
+        }
+
+        return $codes;
     }
 
     /**

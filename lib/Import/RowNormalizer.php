@@ -38,6 +38,11 @@ class RowNormalizer
         $multiFields = $this->config->getMultiFields();
 
         foreach ($fieldCodes as $index => $code) {
+            // Пропускаем колонки без маппинга (пустой код)
+            if ($code === '' || $code === null) {
+                continue;
+            }
+
             $value = trim((string) ($row[$index] ?? ''));
 
             if ($value === '') {

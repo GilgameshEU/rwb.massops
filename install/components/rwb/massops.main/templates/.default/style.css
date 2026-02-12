@@ -521,6 +521,13 @@
     cursor: help;
 }
 
+.rwb-grid-row-duplicate > td {
+    background-color: #dbeafe !important;
+}
+.rwb-grid-row-duplicate {
+    cursor: help;
+}
+
 .rwb-grid-row-success > td {
     background-color: #f0fdf4 !important;
 }

@@ -248,9 +248,15 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $entityType = $this->resolveEntityType();
         $importService = EntityRegistry::createImportService($entityType);
 
+        // Передаём колонки для корректного маппинга полей
+        $options = [
+            'columns' => SessionStorage::getColumns(),
+        ];
+
         try {
             $result = $importService->import(
-                SessionStorage::getRows()
+                SessionStorage::getRows(),
+                $options
             );
         } catch (ArgumentException|LoaderException $e) {
             return [
@@ -306,8 +312,10 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
         $importService = EntityRegistry::createImportService($entityType);
 
-        // Передаём опции для компаний
-        $options = [];
+        // Передаём опции, включая колонки для корректного маппинга полей
+        $options = [
+            'columns' => SessionStorage::getColumns(),
+        ];
         if ($entityType === 'company' && $createCabinets) {
             $options['createCabinets'] = true;
         }
@@ -365,12 +373,15 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
         $entityType = $this->resolveEntityType();
         $rows = SessionStorage::getRows();
+        $columns = SessionStorage::getColumns();
 
         $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
         $createCabinets = $request->getPost('createCabinets') === 'Y';
 
-        // Формируем опции импорта
-        $options = [];
+        // Формируем опции импорта, включая колонки для маппинга полей
+        $options = [
+            'columns' => $columns,
+        ];
         if ($entityType === 'company' && $createCabinets) {
             $options['createCabinets'] = true;
         }
@@ -381,7 +392,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'STATUS' => ImportJobStatus::Pending->value,
             'TOTAL_ROWS' => count($rows),
             'IMPORT_DATA' => serialize($rows),
-            'IMPORT_OPTIONS' => !empty($options) ? serialize($options) : null,
+            'IMPORT_OPTIONS' => serialize($options),
         ]);
 
         if (!$result->isSuccess()) {

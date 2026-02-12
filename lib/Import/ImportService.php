@@ -82,9 +82,8 @@ class ImportService
      */
     protected function processRows(array $rows, ImportMode $mode, array $options = []): array
     {
-        $fieldCodes = array_keys(
-            $this->repository->getFieldList()
-        );
+        // Получаем коды полей из заголовков файла (если переданы колонки)
+        $fieldCodes = $this->resolveFieldCodes($options['columns'] ?? []);
 
         $extractor = new ErrorFieldExtractor(
             $this->repository->getFieldList()
@@ -222,5 +221,47 @@ class ImportService
                 $uf[$fieldCode] = ['need_suppliers'];
             }
         }
+    }
+
+    /**
+     * Определяет коды полей CRM по заголовкам файла
+     *
+     * Если переданы колонки из грида, маппим их названия на коды CRM.
+     * Иначе возвращаем все коды полей в порядке из репозитория (legacy-поведение).
+     *
+     * @param array $columns Колонки грида [{id, name}, ...]
+     *
+     * @return array Массив кодов полей CRM
+     * @throws LoaderException
+     */
+    protected function resolveFieldCodes(array $columns): array
+    {
+        if (empty($columns)) {
+            // Legacy: используем все коды в порядке из репозитория
+            return array_keys($this->repository->getFieldList());
+        }
+
+        // Строим обратный маппинг: название → код
+        $fieldList = $this->repository->getFieldList();
+        $titleToCode = array_flip($fieldList);
+
+        $fieldCodes = [];
+        foreach ($columns as $column) {
+            $columnId = $column['id'] ?? '';
+
+            // Пропускаем служебную колонку с номером строки
+            if ($columnId === 'ROW_NUM') {
+                $fieldCodes[] = '';
+                continue;
+            }
+
+            $title = $column['name'] ?? '';
+            $code = $titleToCode[$title] ?? null;
+
+            // Если поле не найдено — пропускаем (будет обработано как пустое)
+            $fieldCodes[] = $code ?? '';
+        }
+
+        return $fieldCodes;
     }
 }

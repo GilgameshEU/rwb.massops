@@ -6,6 +6,7 @@
 
     window.RwbGridHighlighter = {
         CSS_ERROR_ROW: 'rwb-grid-row-error',
+        CSS_DUPLICATE_ROW: 'rwb-grid-row-duplicate',
         CSS_SUCCESS_ROW: 'rwb-grid-row-success',
 
         _observer: null,
@@ -24,25 +25,36 @@
 
             var self = this;
 
-            // Красные строки с ошибками
+            // Подсвечиваем строки с ошибками (красные или синие для дублей)
             Object.keys(errorsByRow).forEach(function (rowIdx) {
                 var rowEl = self.getRowElement(rowIdx);
                 if (!rowEl) {
                     return;
                 }
 
-                var messages = errorsByRow[rowIdx].map(function (e) {
+                var rowErrors = errorsByRow[rowIdx];
+                var messages = rowErrors.map(function (e) {
                     return e.message || String(e);
                 });
 
-                rowEl.classList.add(self.CSS_ERROR_ROW);
+                // Проверяем, есть ли ошибки дублей
+                var hasDuplicateError = rowErrors.some(function (e) {
+                    return e.type === 'duplicate';
+                });
+
+                // Синий для дублей, красный для остальных ошибок
+                var cssClass = hasDuplicateError ? self.CSS_DUPLICATE_ROW : self.CSS_ERROR_ROW;
+                rowEl.classList.add(cssClass);
                 rowEl.setAttribute('title', messages.join('\n'));
             });
 
-            // Зелёные успешные строки
+            // Зелёные успешные строки (не ошибки и не дубли)
             Object.keys(successRows).forEach(function (rowIdx) {
                 var rowEl = self.getRowElement(rowIdx);
-                if (rowEl && !rowEl.classList.contains(self.CSS_ERROR_ROW)) {
+                if (rowEl &&
+                    !rowEl.classList.contains(self.CSS_ERROR_ROW) &&
+                    !rowEl.classList.contains(self.CSS_DUPLICATE_ROW)
+                ) {
                     rowEl.classList.add(self.CSS_SUCCESS_ROW);
                 }
             });
@@ -66,7 +78,7 @@
          * Убирает все подсветки с грида
          */
         clearHighlights: function () {
-            var classes = [this.CSS_ERROR_ROW, this.CSS_SUCCESS_ROW];
+            var classes = [this.CSS_ERROR_ROW, this.CSS_DUPLICATE_ROW, this.CSS_SUCCESS_ROW];
             classes.forEach(function (cls) {
                 var elements = document.querySelectorAll('.' + cls);
                 for (var i = 0; i < elements.length; i++) {

@@ -25,7 +25,17 @@ class GridDataConverter
             $headerRow = array_shift($rows);
         }
 
-        $columns = [];
+        // Первая колонка — номер строки
+        $columns = [
+            [
+                'id' => 'ROW_NUM',
+                'name' => '№',
+                'sort' => 'ROW_NUM',
+                'default' => true,
+                'width' => 50,
+            ],
+        ];
+
         foreach ($headerRow as $i => $name) {
             $columns[] = [
                 'id' => 'COL_' . $i,
@@ -37,7 +47,9 @@ class GridDataConverter
 
         $gridRows = [];
         foreach ($rows as $rowIndex => $row) {
-            $data = [];
+            $data = [
+                'ROW_NUM' => $rowIndex + 1, // Нумерация с 1
+            ];
 
             foreach ($row as $cellIndex => $value) {
                 $data['COL_' . $cellIndex] = (string) $value;

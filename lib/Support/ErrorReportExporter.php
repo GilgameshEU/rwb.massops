@@ -68,19 +68,33 @@ class ErrorReportExporter
 
             // Колонка с ошибками
             $errorMessages = [];
+            $hasDuplicateError = false;
+
             if (isset($errors[$rowIndex]) && !empty($errors[$rowIndex])) {
                 foreach ($errors[$rowIndex] as $error) {
                     $errorMessages[] = $error['message'] ?? (string) $error;
+                    // Проверяем, есть ли ошибки дублей
+                    if (isset($error['type']) && $error['type'] === 'duplicate') {
+                        $hasDuplicateError = true;
+                    }
                 }
             }
 
             $errorCellAddr = $errorColLetter . $rowNum;
             $sheet->setCellValue($errorCellAddr, implode('; ', $errorMessages));
 
-            // Подсветка строки с ошибками
+            // Подсветка строки
+            $rowRange = 'A' . $rowNum . ':' . $errorColLetter . $rowNum;
             if (!empty($errorMessages)) {
-                $rowRange = 'A' . $rowNum . ':' . $errorColLetter . $rowNum;
-                self::applyErrorRowStyle($sheet, $rowRange);
+                // Строка с ошибками
+                if ($hasDuplicateError) {
+                    self::applyDuplicateRowStyle($sheet, $rowRange);
+                } else {
+                    self::applyErrorRowStyle($sheet, $rowRange);
+                }
+            } else {
+                // Успешная строка — зелёный
+                self::applySuccessRowStyle($sheet, $rowRange);
             }
 
             $rowNum++;
@@ -120,7 +134,7 @@ class ErrorReportExporter
     }
 
     /**
-     * Стиль строки с ошибкой
+     * Стиль строки с ошибкой (красный)
      */
     private static function applyErrorRowStyle(Worksheet $sheet, string $range): void
     {
@@ -128,6 +142,32 @@ class ErrorReportExporter
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
                 'startColor' => ['argb' => 'FFFFC7CE'],
+            ],
+        ]);
+    }
+
+    /**
+     * Стиль строки с дублем (синий)
+     */
+    private static function applyDuplicateRowStyle(Worksheet $sheet, string $range): void
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['argb' => 'FFDBEAFE'],
+            ],
+        ]);
+    }
+
+    /**
+     * Стиль успешной строки (зелёный)
+     */
+    private static function applySuccessRowStyle(Worksheet $sheet, string $range): void
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['argb' => 'FFD1FAE5'],
             ],
         ]);
     }

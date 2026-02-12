@@ -3,6 +3,7 @@
 namespace Rwb\Massops;
 
 use RuntimeException;
+use Rwb\Massops\Import\CompanyImportService;
 use Rwb\Massops\Import\ContactImportService;
 use Rwb\Massops\Import\ImportService;
 use Rwb\Massops\Import\RowNormalizer;
@@ -25,7 +26,7 @@ final class EntityRegistry
             'title' => 'Компании',
             'icon' => 'building',
             'entityType' => EntityType::Company,
-            'importClass' => null,
+            'importClass' => CompanyImportService::class,
             'disabled' => false,
         ],
         'contact' => [
