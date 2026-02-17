@@ -56,7 +56,7 @@
 
             var block = this.createBlock('rwb-import-errors', modifier);
 
-            var title = isDryRun ? 'Результаты Dry Run' : 'Результаты импорта';
+            var title = isDryRun ? 'Результаты проверки' : 'Результаты импорта';
             block.appendChild(this.createTitle(title, block));
 
             var successLabel = isDryRun ? 'Готово к добавлению' : 'Успешно';
@@ -76,16 +76,10 @@
             block.appendChild(statsEl);
 
             if (allErrors.length > 0) {
-                var summary = this.buildErrorSummary(allErrors);
-                if (summary.length > 0) {
-                    var summaryTitle = BX.create('div', {
-                        props: {className: 'rwb-result-summary-title'}
-                    });
-                    summaryTitle.textContent = 'Типы ошибок:';
-
-                    block.appendChild(summaryTitle);
-                    block.appendChild(this.createList(summary));
-                }
+                // Группируем ошибки по категориям
+                var grouped = this.buildGroupedErrors(allErrors);
+                var groupedHtml = this.buildGroupedErrorsHtml(grouped);
+                block.appendChild(groupedHtml);
 
                 // Кнопка скачивания отчёта с ошибками (только для dry-run с ошибками)
                 if (isDryRun) {
@@ -136,26 +130,144 @@
         },
 
         /**
-         * Группирует ошибки по тексту сообщения
+         * Группирует ошибки по категориям в человекочитаемом формате
          *
          * @param {Array} errors
-         * @returns {string[]}
+         * @returns {Object} Объект с категориями ошибок
          */
-        buildErrorSummary: function (errors) {
-            var counts = {};
+        buildGroupedErrors: function (errors) {
+            var validationErrors = {};   // code -> {message, rows: []}
+            var fileDuplicates = {};     // inn -> [rowNumbers]
+            var crmDuplicates = [];      // [{row, companyId}]
 
             errors.forEach(function (error) {
-                var msg = (error && error.message) ? error.message : String(error);
-                counts[msg] = (counts[msg] || 0) + 1;
+                if (!error) return;
+
+                var code = error.code || '';
+                var type = error.type || '';
+                var row = error.row;
+                var context = error.context || {};
+
+                if (code === 'DUPLICATE_IN_FILE' && context.inn) {
+                    // Дубликаты внутри файла — группируем по ИНН
+                    var inn = String(context.inn);
+                    if (!fileDuplicates[inn]) {
+                        fileDuplicates[inn] = [];
+                    }
+                    if (row && fileDuplicates[inn].indexOf(row) === -1) {
+                        fileDuplicates[inn].push(row);
+                    }
+                } else if (code === 'DUPLICATE_IN_CRM' && context.existingCompanyId) {
+                    // Дубликаты в CRM
+                    crmDuplicates.push({
+                        row: row,
+                        companyId: context.existingCompanyId
+                    });
+                } else {
+                    // Остальные ошибки валидации — группируем по коду
+                    var key = code || error.message || 'UNKNOWN';
+                    if (!validationErrors[key]) {
+                        validationErrors[key] = {
+                            message: error.message || key,
+                            rows: []
+                        };
+                    }
+                    if (row && validationErrors[key].rows.indexOf(row) === -1) {
+                        validationErrors[key].rows.push(row);
+                    }
+                }
             });
 
-            var result = [];
-            Object.keys(counts).forEach(function (msg) {
-                var count = counts[msg];
-                result.push(count > 1 ? msg + ' (' + count + ' стр.)' : msg);
-            });
+            return {
+                validation: validationErrors,
+                fileDuplicates: fileDuplicates,
+                crmDuplicates: crmDuplicates
+            };
+        },
 
-            return result;
+        /**
+         * Строит HTML-содержимое для группированных ошибок
+         *
+         * @param {Object} grouped Результат buildGroupedErrors
+         * @returns {DocumentFragment}
+         */
+        buildGroupedErrorsHtml: function (grouped) {
+            var fragment = document.createDocumentFragment();
+            var self = this;
+
+            // 1. Ошибки валидации
+            var validationKeys = Object.keys(grouped.validation);
+            if (validationKeys.length > 0) {
+                var valSection = BX.create('div', {props: {className: 'rwb-error-section'}});
+                var valTitle = BX.create('div', {
+                    props: {className: 'rwb-error-section-title'},
+                    text: 'Ошибки валидации:'
+                });
+                valSection.appendChild(valTitle);
+
+                var valList = BX.create('ul', {props: {className: 'rwb-result-list'}});
+                validationKeys.forEach(function (key) {
+                    var item = grouped.validation[key];
+                    var li = BX.create('li');
+                    var rowsText = item.rows.length > 0
+                        ? ' — строки: ' + item.rows.sort(function (a, b) {
+                        return a - b;
+                    }).join(', ')
+                        : '';
+                    li.textContent = item.message + rowsText;
+                    valList.appendChild(li);
+                });
+                valSection.appendChild(valList);
+                fragment.appendChild(valSection);
+            }
+
+            // 2. Дубликаты ИНН внутри файла
+            var fileInnKeys = Object.keys(grouped.fileDuplicates);
+            if (fileInnKeys.length > 0) {
+                var fileSection = BX.create('div', {props: {className: 'rwb-error-section'}});
+                var fileTitle = BX.create('div', {
+                    props: {className: 'rwb-error-section-title'},
+                    text: 'Дубликаты ИНН внутри файла:'
+                });
+                fileSection.appendChild(fileTitle);
+
+                var fileList = BX.create('ul', {props: {className: 'rwb-result-list'}});
+                fileInnKeys.forEach(function (inn) {
+                    var rows = grouped.fileDuplicates[inn].sort(function (a, b) {
+                        return a - b;
+                    });
+                    var li = BX.create('li');
+                    li.textContent = 'ИНН "' + inn + '" — строки: ' + rows.join(', ');
+                    fileList.appendChild(li);
+                });
+                fileSection.appendChild(fileList);
+                fragment.appendChild(fileSection);
+            }
+
+            // 3. Дубликаты в CRM
+            if (grouped.crmDuplicates.length > 0) {
+                var crmSection = BX.create('div', {props: {className: 'rwb-error-section'}});
+                var crmTitle = BX.create('div', {
+                    props: {className: 'rwb-error-section-title'},
+                    text: 'Дубликаты ИНН в CRM:'
+                });
+                crmSection.appendChild(crmTitle);
+
+                var crmList = BX.create('ul', {props: {className: 'rwb-result-list'}});
+                grouped.crmDuplicates
+                    .sort(function (a, b) {
+                        return a.row - b.row;
+                    })
+                    .forEach(function (dup) {
+                        var li = BX.create('li');
+                        li.textContent = 'Строка ' + dup.row + ': компания уже существует (ID: ' + dup.companyId + ')';
+                        crmList.appendChild(li);
+                    });
+                crmSection.appendChild(crmList);
+                fragment.appendChild(crmSection);
+            }
+
+            return fragment;
         },
 
         // --- Вспомогательные методы ---

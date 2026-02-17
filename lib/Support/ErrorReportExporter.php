@@ -72,7 +72,7 @@ class ErrorReportExporter
 
             if (isset($errors[$rowIndex]) && !empty($errors[$rowIndex])) {
                 foreach ($errors[$rowIndex] as $error) {
-                    $errorMessages[] = $error['message'] ?? (string) $error;
+                    $errorMessages[] = self::formatErrorMessage($error);
                     // Проверяем, есть ли ошибки дублей
                     if (isset($error['type']) && $error['type'] === 'duplicate') {
                         $hasDuplicateError = true;
@@ -107,6 +107,45 @@ class ErrorReportExporter
         }
 
         self::output($spreadsheet, $filename);
+    }
+
+    /**
+     * Форматирует сообщение об ошибке для XLSX-отчёта
+     *
+     * @param array $error Данные ошибки
+     *
+     * @return string
+     */
+    private static function formatErrorMessage(array $error): string
+    {
+        $code = $error['code'] ?? '';
+        $context = $error['context'] ?? [];
+
+        // Дубликат ИНН в файле — более понятный формат
+        if ($code === 'DUPLICATE_IN_FILE') {
+            $inn = $context['inn'] ?? '';
+            $duplicateRows = $context['duplicateRows'] ?? [];
+            if (!empty($duplicateRows)) {
+                $rowsStr = implode(', ', $duplicateRows);
+                return $inn
+                    ? "Дубликат ИНН \"{$inn}\": совпадает со строками {$rowsStr}"
+                    : "Дубликат ИНН: совпадает со строками {$rowsStr}";
+            }
+        }
+
+        // Дубликат ИНН в CRM — оставляем понятный формат
+        if ($code === 'DUPLICATE_IN_CRM') {
+            $companyId = $context['existingCompanyId'] ?? '';
+            $inn = $context['inn'] ?? '';
+            if ($companyId) {
+                return $inn
+                    ? "Компания с ИНН \"{$inn}\" уже существует в CRM (ID: {$companyId})"
+                    : "Компания с таким ИНН уже существует в CRM (ID: {$companyId})";
+            }
+        }
+
+        // Для остальных ошибок — стандартное сообщение
+        return $error['message'] ?? (string)$error;
     }
 
     /**

@@ -6,6 +6,7 @@ use Bitrix\Main\Config\Option;
 use Bitrix\Main\Loader;
 use Bitrix\Main\Type\DateTime;
 use Rwb\Massops\EntityRegistry;
+use Rwb\Massops\Import\ImportError;
 use RuntimeException;
 
 /**
@@ -67,79 +68,117 @@ class ImportProcessor
             ]);
         }
 
-        // Десериализация данных
-        $allRows = unserialize($job['IMPORT_DATA']);
-        $entityType = $job['ENTITY_TYPE'];
-        $startIndex = (int) $job['PROCESSED_ROWS'];
-        $totalRows = (int) $job['TOTAL_ROWS'];
-        $batchSize = $this->getBatchSize();
+        try {
+            // Десериализация данных
+            $allRows = unserialize($job['IMPORT_DATA']);
 
-        // Десериализация опций импорта
-        $options = [];
-        if (!empty($job['IMPORT_OPTIONS'])) {
-            $options = unserialize($job['IMPORT_OPTIONS']);
-        }
-
-        $endIndex = min($startIndex + $batchSize, $totalRows);
-
-        // Вырезаем пачку строк (с сохранением ключей)
-        $allRowsIndexed = array_values($allRows);
-        $batchRows = [];
-        for ($i = $startIndex; $i < $endIndex; $i++) {
-            $batchRows[$i] = $allRowsIndexed[$i];
-        }
-
-        // Обработка пачки через ImportService с опциями
-        $importService = EntityRegistry::createImportService($entityType);
-        $result = $importService->import($batchRows, $options);
-
-        // Накопление ошибок
-        $existingErrors = !empty($job['ERRORS_DATA'])
-            ? unserialize($job['ERRORS_DATA'])
-            : [];
-
-        if (!empty($result['errors'])) {
-            foreach ($result['errors'] as $rowIndex => $rowErrors) {
-                $existingErrors[$rowIndex] = $rowErrors;
+            if (!is_array($allRows)) {
+                throw new RuntimeException(
+                    'Не удалось десериализовать данные импорта (IMPORT_DATA). '
+                    . 'Вероятно, данные были обрезаны при записи в БД. '
+                    . 'Размер поля: ' . strlen($job['IMPORT_DATA'] ?? '') . ' байт'
+                );
             }
-        }
 
-        // Накопление ID созданных сущностей
-        $existingIds = !empty($job['CREATED_IDS'])
-            ? unserialize($job['CREATED_IDS'])
-            : [];
+            $entityType = $job['ENTITY_TYPE'];
+            $startIndex = (int) $job['PROCESSED_ROWS'];
+            $totalRows = (int) $job['TOTAL_ROWS'];
+            $batchSize = $this->getBatchSize();
 
-        if (!empty($result['added'])) {
-            foreach ($result['added'] as $item) {
-                if (!empty($item['entityId'])) {
-                    $existingIds[] = (int) $item['entityId'];
+            // Десериализация опций импорта
+            $options = [];
+            if (!empty($job['IMPORT_OPTIONS'])) {
+                $options = unserialize($job['IMPORT_OPTIONS']);
+            }
+
+            $endIndex = min($startIndex + $batchSize, $totalRows);
+
+            // Вырезаем пачку строк (с сохранением ключей)
+            $allRowsIndexed = array_values($allRows);
+            $batchRows = [];
+            for ($i = $startIndex; $i < $endIndex; $i++) {
+                $batchRows[$i] = $allRowsIndexed[$i];
+            }
+
+            // Обработка пачки через ImportService с опциями
+            $importService = EntityRegistry::createImportService($entityType);
+            $result = $importService->import($batchRows, $options);
+
+            // Накопление ошибок
+            $existingErrors = !empty($job['ERRORS_DATA'])
+                ? unserialize($job['ERRORS_DATA'])
+                : [];
+
+            if (!empty($result['errors'])) {
+                foreach ($result['errors'] as $rowIndex => $rowErrors) {
+                    $existingErrors[$rowIndex] = $rowErrors;
                 }
             }
+
+            // Накопление ID созданных сущностей
+            $existingIds = !empty($job['CREATED_IDS'])
+                ? unserialize($job['CREATED_IDS'])
+                : [];
+
+            if (!empty($result['added'])) {
+                foreach ($result['added'] as $item) {
+                    if (!empty($item['entityId'])) {
+                        $existingIds[] = (int) $item['entityId'];
+                    }
+                }
+            }
+
+            // Обновление прогресса
+            $newProcessed = $endIndex;
+            $newSuccess = (int) $job['SUCCESS_COUNT'] + $result['success'];
+            $newErrorCount = (int) $job['ERROR_COUNT'] + count($result['errors']);
+
+            $updateData = [
+                'PROCESSED_ROWS' => $newProcessed,
+                'SUCCESS_COUNT' => $newSuccess,
+                'ERROR_COUNT' => $newErrorCount,
+                'ERRORS_DATA' => serialize($existingErrors),
+                'CREATED_IDS' => serialize($existingIds),
+            ];
+
+            // Проверяем завершение
+            $isComplete = ($newProcessed >= $totalRows);
+
+            if ($isComplete) {
+                $updateData['STATUS'] = ImportJobStatus::Completed->value;
+                $updateData['FINISHED_AT'] = new DateTime();
+            }
+
+            ImportJobTable::update($jobId, $updateData);
+
+            return !$isComplete;
+        } catch (\Throwable $e) {
+            // При любой ошибке — переводим задачу в статус error
+            // и сохраняем текст исключения в ERRORS_DATA для отображения на фронтенде
+            $errorsData = [];
+            try {
+                if (!empty($job['ERRORS_DATA'])) {
+                    $errorsData = unserialize($job['ERRORS_DATA']) ?: [];
+                }
+            } catch (\Throwable) {
+                $errorsData = [];
+            }
+
+            $errorsData['__exception__'] = [
+                new ImportError(
+                    type: 'system',
+                    code: 'PROCESSING_EXCEPTION',
+                    message: $e->getMessage(),
+                ),
+            ];
+
+            ImportJobTable::update($jobId, [
+                'STATUS' => ImportJobStatus::Error->value,
+                'FINISHED_AT' => new DateTime(),
+                'ERRORS_DATA' => serialize($errorsData),
+            ]);
+
+            throw $e;
         }
-
-        // Обновление прогресса
-        $newProcessed = $endIndex;
-        $newSuccess = (int) $job['SUCCESS_COUNT'] + $result['success'];
-        $newErrorCount = (int) $job['ERROR_COUNT'] + count($result['errors']);
-
-        $updateData = [
-            'PROCESSED_ROWS' => $newProcessed,
-            'SUCCESS_COUNT' => $newSuccess,
-            'ERROR_COUNT' => $newErrorCount,
-            'ERRORS_DATA' => serialize($existingErrors),
-            'CREATED_IDS' => serialize($existingIds),
-        ];
-
-        // Проверяем завершение
-        $isComplete = ($newProcessed >= $totalRows);
-
-        if ($isComplete) {
-            $updateData['STATUS'] = ImportJobStatus::Completed->value;
-            $updateData['FINISHED_AT'] = new DateTime();
-        }
-
-        ImportJobTable::update($jobId, $updateData);
-
-        return !$isComplete;
     }
 }

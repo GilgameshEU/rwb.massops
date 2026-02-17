@@ -33,6 +33,13 @@
                 }
 
                 var rowErrors = errorsByRow[rowIdx];
+                // Приводим к массиву (PHP может вернуть объект вместо массива)
+                if (!Array.isArray(rowErrors)) {
+                    rowErrors = typeof rowErrors === 'object' && rowErrors !== null
+                        ? Object.values(rowErrors)
+                        : [rowErrors];
+                }
+
                 var messages = rowErrors.map(function (e) {
                     return e.message || String(e);
                 });

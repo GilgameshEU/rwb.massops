@@ -21,15 +21,29 @@ class RowNormalizer
     }
 
     /**
+     * Типы полей, содержащие дату
+     */
+    private const DATE_TYPES = ['date', 'Date'];
+    private const DATETIME_TYPES = ['datetime', 'DateTime'];
+
+    /**
      * Нормализует строку данных
      *
-     * @param array $row        Данные строки
-     * @param array $fieldCodes Коды полей CRM
+     * @param array $row            Данные строки
+     * @param array $fieldCodes     Коды полей CRM
+     * @param array $fieldTypes     Карта типов полей (fieldCode => typeId)
+     * @param array $multipleFields Коды UF-полей с MULTIPLE=Y
+     * @param array $enumMappings   Маппинг enum: ['FIELD' => ['Текст' => 'id', ...], ...]
      *
      * @return NormalizeResult
      */
-    public function normalize(array $row, array $fieldCodes): NormalizeResult
-    {
+    public function normalize(
+        array $row,
+        array $fieldCodes,
+        array $fieldTypes = [],
+        array $multipleFields = [],
+        array $enumMappings = []
+    ): NormalizeResult {
         $fields = [];
         $uf = [];
         $fm = [];
@@ -67,17 +81,95 @@ class RowNormalizer
                 continue;
             }
 
+            // Валидация даты/времени по типу поля
+            $fieldType = $fieldTypes[$code] ?? null;
+
+            if ($fieldType !== null && $this->isDateType($fieldType)) {
+                $dateError = $this->validateDateValue($value, $code, $fieldType);
+                if ($dateError !== null) {
+                    $errors[] = $dateError;
+                    continue; // Не добавляем невалидное значение
+                }
+            }
+
             // пользовательские поля
             if (str_starts_with($code, 'UF_')) {
-                $uf[$code] = $value;
+                if (in_array($code, $multipleFields, true)) {
+                    // Множественные поля — разбиваем по запятой, резолвим enum
+                    $uf[$code] = array_map(
+                        fn(string $v) => $this->resolveEnumValue(trim($v), $code, $enumMappings),
+                        explode(',', $value)
+                    );
+                } else {
+                    $uf[$code] = $this->resolveEnumValue($value, $code, $enumMappings);
+                }
                 continue;
             }
 
-            // обычные поля
-            $fields[$code] = $value;
+            // обычные поля (включая CRM-справочники: INDUSTRY, COMPANY_TYPE и т.п.)
+            $fields[$code] = $this->resolveEnumValue($value, $code, $enumMappings);
         }
 
         return new NormalizeResult($fields, $uf, $fm, $errors);
+    }
+
+    /**
+     * Проверяет, является ли тип поля датой или датой-временем
+     */
+    private function isDateType(string $type): bool
+    {
+        return in_array($type, self::DATE_TYPES, true)
+            || in_array($type, self::DATETIME_TYPES, true);
+    }
+
+    /**
+     * Резолвит текстовое значение enum-поля в ID/XML_ID
+     *
+     * Если для поля есть маппинг и текст найден — возвращает ID.
+     * Иначе возвращает исходное значение без изменений.
+     */
+    private function resolveEnumValue(string $value, string $code, array $enumMappings): string
+    {
+        if (isset($enumMappings[$code][$value])) {
+            return (string) $enumMappings[$code][$value];
+        }
+
+        return $value;
+    }
+
+    /**
+     * Валидирует значение даты/времени
+     *
+     * @return ImportError|null Ошибка валидации или null если значение корректно
+     */
+    private function validateDateValue(string $value, string $fieldCode, string $fieldType): ?ImportError
+    {
+        if (in_array($fieldType, self::DATETIME_TYPES, true)) {
+            // Формат: ДД.ММ.ГГГГ ЧЧ:ММ:СС
+            $parsed = \DateTime::createFromFormat('d.m.Y H:i:s', $value);
+            if ($parsed === false || $parsed->format('d.m.Y H:i:s') !== $value) {
+                return new ImportError(
+                    type: 'field',
+                    code: 'INVALID_DATETIME',
+                    message: 'Неверный формат даты и времени: ' . $value . '. Ожидается ДД.ММ.ГГГГ ЧЧ:ММ:СС',
+                    field: $fieldCode
+                );
+            }
+            return null;
+        }
+
+        // Формат: ДД.ММ.ГГГГ
+        $parsed = \DateTime::createFromFormat('d.m.Y', $value);
+        if ($parsed === false || $parsed->format('d.m.Y') !== $value) {
+            return new ImportError(
+                type: 'field',
+                code: 'INVALID_DATE',
+                message: 'Неверный формат даты: ' . $value . '. Ожидается ДД.ММ.ГГГГ',
+                field: $fieldCode
+            );
+        }
+
+        return null;
     }
 
     /**

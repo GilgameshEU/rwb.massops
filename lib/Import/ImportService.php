@@ -9,9 +9,11 @@ use Bitrix\Main\LoaderException;
 use Exception;
 use InvalidArgumentException;
 use RuntimeException;
+use Bitrix\Crm\Field;
 use Rwb\Massops\Import\Parser\CsvParser;
 use Rwb\Massops\Import\Parser\XlsxParser;
 use Rwb\Massops\Repository\CrmRepository;
+use Rwb\Massops\Service\UserResolver;
 use Rwb\Massops\Support\UserFieldHelper;
 
 /**
@@ -24,10 +26,13 @@ use Rwb\Massops\Support\UserFieldHelper;
  */
 class ImportService
 {
+    protected readonly UserResolver $userResolver;
+
     public function __construct(
         protected readonly CrmRepository $repository,
         protected readonly RowNormalizer $normalizer = new RowNormalizer()
     ) {
+        $this->userResolver = new UserResolver();
     }
 
     /**
@@ -84,6 +89,9 @@ class ImportService
     {
         // Получаем коды полей из заголовков файла (если переданы колонки)
         $fieldCodes = $this->resolveFieldCodes($options['columns'] ?? []);
+        $fieldTypes = $this->repository->getFieldTypeMap();
+        $multipleFields = $this->repository->getMultipleFieldCodes();
+        $enumMappings = $this->repository->getEnumMappings();
 
         $extractor = new ErrorFieldExtractor(
             $this->repository->getFieldList()
@@ -98,19 +106,36 @@ class ImportService
         foreach ($rows as $rowIndex => $row) {
             $normalized = $this->normalizer->normalize(
                 array_values($row['data']),
-                $fieldCodes
+                $fieldCodes,
+                $fieldTypes,
+                $multipleFields,
+                $enumMappings
             );
 
             $fields = $normalized->fields;
             $uf = $normalized->uf;
             $fm = $normalized->fm;
 
+            // Резолюция полей типа "Пользователь" (ASSIGNED_BY_ID и др.)
+            $userErrors = $this->resolveUserFields($fields, $fieldTypes);
+
             // Применяем опции импорта
             $this->applyImportOptions($uf, $options);
 
             $hasErrors = false;
 
-            // 0. Ошибки нормализации (невалидные телефоны и т.д.)
+            // 0. Ошибки резолюции пользователей
+            if (!empty($userErrors)) {
+                foreach ($userErrors as $error) {
+                    $errors[$rowIndex][] = $this->attachRowToError(
+                        $error,
+                        $rowIndex
+                    );
+                }
+                $hasErrors = true;
+            }
+
+            // 1. Ошибки нормализации (невалидные телефоны и т.д.)
             if (!empty($normalized->errors)) {
                 foreach ($normalized->errors as $error) {
                     $errors[$rowIndex][] = $this->attachRowToError(
@@ -121,7 +146,7 @@ class ImportService
                 $hasErrors = true;
             }
 
-            // 1. Бизнес-валидация
+            // 2. Бизнес-валидация
             $validation = $this->validateRow($fields, $uf, $fm);
 
             if (!$validation->isValid()) {
@@ -134,7 +159,7 @@ class ImportService
                 $hasErrors = true;
             }
 
-            // 2. CRM-валидация / сохранение
+            // 3. CRM-валидация / сохранение
             $result = $this->repository->add(
                 $fields,
                 $uf,
@@ -221,6 +246,48 @@ class ImportService
                 $uf[$fieldCode] = ['need_suppliers'];
             }
         }
+    }
+
+    /**
+     * Резолюция полей типа "Пользователь"
+     *
+     * Для полей с типом Field::TYPE_USER (например ASSIGNED_BY_ID):
+     * - числовой ID → проверка существования
+     * - "Имя Фамилия" → поиск пользователя
+     *
+     * @param array $fields     Ссылка на массив полей (значения заменяются на ID)
+     * @param array $fieldTypes Карта типов полей (код → тип)
+     *
+     * @return ImportError[] Ошибки для ненайденных пользователей
+     */
+    protected function resolveUserFields(array &$fields, array $fieldTypes): array
+    {
+        $errors = [];
+
+        foreach ($fields as $code => $value) {
+            $fieldType = $fieldTypes[$code] ?? null;
+
+            if ($fieldType !== Field::TYPE_USER) {
+                continue;
+            }
+
+            $userId = $this->userResolver->resolve((string) $value);
+
+            if ($userId === null) {
+                $errors[] = new ImportError(
+                    type: 'field',
+                    code: 'USER_NOT_FOUND',
+                    message: 'Пользователь не найден: ' . $value,
+                    field: $code
+                );
+                unset($fields[$code]);
+                continue;
+            }
+
+            $fields[$code] = $userId;
+        }
+
+        return $errors;
     }
 
     /**

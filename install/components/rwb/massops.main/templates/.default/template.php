@@ -140,22 +140,23 @@ $svgIcons = [
                     <div class="rwb-preview">
                         <div class="rwb-preview__toolbar">
                             <div class="rwb-preview__info">
-                                Загружено строк: <strong id="rwb-row-count"><?= count($arResult['GRID_ROWS']) ?></strong>
+                                Загружено строк: <strong id="rwb-row-count"><?= $arResult['GRID_TOTAL_ROWS'] ?? count($arResult['GRID_ROWS']) ?></strong>
                             </div>
 
-                            <label class="rwb-toggle">
-                                <input type="checkbox" class="rwb-toggle__input" id="rwb-import-dry-run" checked>
-                                <span class="rwb-toggle__track"></span>
-                                <span class="rwb-toggle__label">Dry Run (тестовый режим)</span>
-                            </label>
-
-                            <label class="rwb-toggle" id="rwb-create-cabinets-wrap" style="display: none;">
-                                <input type="checkbox" class="rwb-toggle__input" id="rwb-create-cabinets">
-                                <span class="rwb-toggle__track"></span>
-                                <span class="rwb-toggle__label">Создать кабинеты</span>
-                            </label>
-
                             <button class="ui-btn ui-btn-primary ui-btn-sm" id="rwb-import-run">Проверить</button>
+
+                            <div id="rwb-import-actions" style="display: none;">
+                                <label class="rwb-toggle" id="rwb-create-cabinets-wrap" style="display: none;">
+                                    <input type="checkbox" class="rwb-toggle__input" id="rwb-create-cabinets">
+                                    <span class="rwb-toggle__track"></span>
+                                    <span class="rwb-toggle__label">Создать кабинеты</span>
+                                </label>
+                                <button class="ui-btn ui-btn-success ui-btn-sm" id="rwb-import-start"></button>
+                            </div>
+
+                            <span id="rwb-import-nothing" class="rwb-preview__nothing" style="display: none;">
+                                Нет компаний для добавления
+                            </span>
                         </div>
 
                         <div id="rwb-results-container"></div>
@@ -173,23 +174,42 @@ $svgIcons = [
 
                         <div id="rwb-grid-container">
                             <?php
+                            $gridParams = [
+                                'GRID_ID' => 'RWB_MASSOPS_GRID',
+                                'COLUMNS' => $arResult['GRID_COLUMNS'],
+                                'ROWS' => $arResult['GRID_ROWS'],
+                                'SHOW_ROW_CHECKBOXES' => false,
+                                'AJAX_MODE' => 'Y',
+                                'AJAX_OPTION_JUMP' => 'N',
+                                'AJAX_OPTION_HISTORY' => 'N',
+                                'ALLOW_COLUMNS_SORT' => false,
+                                'ALLOW_COLUMNS_RESIZE' => true,
+                                'ALLOW_SORT' => true,
+                                'SORT' => $arResult['GRID_SORT']['by'] ?? '',
+                                'SORT_VARS' => ['by' => 'by', 'order' => 'order'],
+                            ];
+
+                            if (isset($arResult['GRID_NAV'])) {
+                                $gridParams['NAV_OBJECT'] = $arResult['GRID_NAV'];
+                                $gridParams['SHOW_NAVIGATION_PANEL'] = true;
+                                $gridParams['SHOW_PAGINATION'] = true;
+                                $gridParams['SHOW_TOTAL_COUNTER'] = true;
+                                $gridParams['TOTAL_ROWS_COUNT'] = $arResult['GRID_TOTAL_ROWS'];
+                                $gridParams['NAV_PARAM_NAME'] = 'rwb-grid-nav';
+                                $gridParams['PAGE_SIZES'] = [
+                                    ['NAME' => '20', 'VALUE' => '20'],
+                                    ['NAME' => '50', 'VALUE' => '50'],
+                                    ['NAME' => '100', 'VALUE' => '100'],
+                                    ['NAME' => '200', 'VALUE' => '200'],
+                                    ['NAME' => '500', 'VALUE' => '500'],
+                                ];
+                                $gridParams['SHOW_PAGESIZE'] = true;
+                            }
+
                             $APPLICATION->IncludeComponent(
                                 'bitrix:main.ui.grid',
                                 '',
-                                [
-                                    'GRID_ID' => 'RWB_MASSOPS_GRID',
-                                    'COLUMNS' => $arResult['GRID_COLUMNS'],
-                                    'ROWS' => $arResult['GRID_ROWS'],
-                                    'SHOW_ROW_CHECKBOXES' => false,
-                                    'AJAX_MODE' => 'Y',
-                                    'AJAX_OPTION_JUMP' => 'N',
-                                    'AJAX_OPTION_HISTORY' => 'N',
-                                    'ALLOW_COLUMNS_SORT' => false,
-                                    'ALLOW_COLUMNS_RESIZE' => true,
-                                    'ALLOW_SORT' => true,
-                                    'SORT' => $arResult['GRID_SORT']['by'] ?? '',
-                                    'SORT_VARS' => ['by' => 'by', 'order' => 'order'],
-                                ]
+                                $gridParams
                             );
                             ?>
                         </div>

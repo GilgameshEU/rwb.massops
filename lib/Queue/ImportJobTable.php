@@ -48,10 +48,13 @@ class ImportJobTable extends Entity\DataManager
             new Entity\IntegerField('ERROR_COUNT', [
                 'default_value' => 0,
             ]),
-            new Entity\TextField('ERRORS_DATA'),
+            new Entity\TextField('ERRORS_DATA', [
+                'long' => true,
+            ]),
             new Entity\TextField('CREATED_IDS'),
             new Entity\TextField('IMPORT_DATA', [
                 'required' => true,
+                'long' => true,
             ]),
             new Entity\TextField('IMPORT_OPTIONS', [
                 'nullable' => true,

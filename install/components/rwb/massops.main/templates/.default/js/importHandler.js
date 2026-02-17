@@ -1,65 +1,78 @@
 /**
  * Модуль для обработки импорта данных
+ *
+ * Последовательный flow:
+ *   Шаг 1: Кнопка «Проверить» (#rwb-import-run) — запускает dry run
+ *   Шаг 2 (readyCount > 0): «Проверить» скрывается, появляется
+ *          блок #rwb-import-actions с кнопкой «Импортировать компании (N шт.)»
+ *          и toggle «Создать кабинеты» (только для company)
+ *   Шаг 2 (readyCount = 0): «Проверить» скрывается, появляется
+ *          надпись «Нет компаний для добавления»
+ *   После импорта: возврат к Шагу 1
  */
 (function () {
     'use strict';
 
     window.RwbImportImportHandler = {
+        /** @type {HTMLElement|null} */
+        checkBtn: null,
+        /** @type {HTMLElement|null} */
+        importBtn: null,
+        /** @type {Function|null} */
+        getEntityType: null,
+        /** Количество строк, готовых к импорту (из последнего dry run) */
+        lastReadyCount: null,
+
         /**
-         * Инициализирует обработчик импорта
+         * Инициализирует обработчик
          *
-         * @param {HTMLElement} importBtn Кнопка импорта
-         * @param {Function} getEntityType Функция получения текущего типа сущности
+         * @param {HTMLElement} checkBtn   Кнопка «Проверить»
+         * @param {HTMLElement} importBtn  Кнопка «Импортировать N ...»
+         * @param {Function}    getEntityType
          */
-        init: function (importBtn, getEntityType) {
+        init: function (checkBtn, importBtn, getEntityType) {
             var self = this;
-            importBtn.addEventListener('click', function () {
-                self.handleImport(importBtn, getEntityType);
+            this.checkBtn = checkBtn;
+            this.importBtn = importBtn;
+            this.getEntityType = getEntityType;
+
+            checkBtn.addEventListener('click', function () {
+                self._handleCheck();
             });
-        },
 
-        /**
-         * Обрабатывает импорт / dry-run
-         *
-         * @param {HTMLElement} importBtn
-         * @param {Function} getEntityType
-         */
-        handleImport: function (importBtn, getEntityType) {
-            var originalText = importBtn.textContent;
-            var dryRunToggle = BX('rwb-import-dry-run');
-            var isDryRun = dryRunToggle && dryRunToggle.checked;
-
-            // Получаем состояние чекбокса кабинетов (только для компаний)
-            var createCabinetsToggle = BX('rwb-create-cabinets');
-            var createCabinets = createCabinetsToggle && createCabinetsToggle.checked;
-
-            var loadingText = isDryRun ? 'Проверка...' : 'Запуск импорта...';
-            this.setLoading(importBtn, true, loadingText);
-
-            var entityType = getEntityType();
-            var container = document.getElementById('rwb-results-container');
-
-            if (isDryRun) {
-                this._runDryRun(importBtn, originalText, entityType, container, createCabinets);
-            } else {
-                this._runAsyncImport(importBtn, originalText, entityType, container, createCabinets);
+            if (importBtn) {
+                importBtn.addEventListener('click', function () {
+                    self._handleImport();
+                });
             }
         },
 
-        /**
-         * Синхронный dry run
-         */
-        _runDryRun: function (importBtn, originalText, entityType, container, createCabinets) {
+        // ----------------------------------------------------------------
+        //  Проверка (dry run)
+        // ----------------------------------------------------------------
+
+        _handleCheck: function () {
+            var self = this;
+            var originalText = this.checkBtn.textContent;
+
+            this.setLoading(this.checkBtn, true, 'Проверка...');
+
+            var entityType = this.getEntityType();
+            var container = document.getElementById('rwb-results-container');
+            var createCabinets = this._getCreateCabinets();
+
             BX.ajax.runComponentAction('rwb:massops.main', 'runDryRun', {
                 mode: 'class',
                 data: {entityType: entityType, createCabinets: createCabinets ? 'Y' : 'N'}
             }).then(function (response) {
-                this.setLoading(importBtn, false, originalText);
+                self.setLoading(self.checkBtn, false, originalText);
 
-                var allErrors = this._collectErrors(response.data.errors);
+                var allErrors = self._collectErrors(response.data.errors);
                 var wouldBeAdded = response.data.wouldBeAdded || 0;
                 var gridErrors = response.data.errors || {};
                 var successRows = response.data.wouldBeAddedDetails || {};
+
+                self.lastReadyCount = wouldBeAdded;
 
                 window.RwbImportErrorHandler.showImportErrors(
                     allErrors, gridErrors, wouldBeAdded, container, true
@@ -70,17 +83,28 @@
                     window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
                 }
 
-                this._updateButtonText(importBtn);
-            }.bind(this)).catch(function (error) {
-                this.setLoading(importBtn, false, originalText);
-                this._showError(error, container);
-            }.bind(this));
+                // Обновляем toolbar по результатам проверки
+                self._showPostCheckState(wouldBeAdded);
+            }).catch(function (error) {
+                self.setLoading(self.checkBtn, false, originalText);
+                self._showError(error, container);
+            });
         },
 
-        /**
-         * Асинхронный импорт через очередь
-         */
-        _runAsyncImport: function (importBtn, originalText, entityType, container, createCabinets) {
+        // ----------------------------------------------------------------
+        //  Импорт
+        // ----------------------------------------------------------------
+
+        _handleImport: function () {
+            var self = this;
+            var originalText = this.importBtn.textContent;
+
+            this.setLoading(this.importBtn, true, 'Запуск импорта...');
+
+            var entityType = this.getEntityType();
+            var container = document.getElementById('rwb-results-container');
+            var createCabinets = this._getCreateCabinets();
+
             BX.ajax.runComponentAction('rwb:massops.main', 'startImport', {
                 mode: 'class',
                 data: {entityType: entityType, createCabinets: createCabinets ? 'Y' : 'N'}
@@ -88,18 +112,26 @@
                 var jobId = response.data.jobId;
 
                 window.RwbProgressHandler.start(jobId, function (result) {
-                    this.setLoading(importBtn, false, originalText);
+                    self.setLoading(self.importBtn, false, originalText);
                     window.RwbProgressHandler.hide();
 
-                    var allErrors = this._collectErrors(result.errors);
+                    var allErrors = self._collectErrors(result.errors);
                     var gridErrors = result.errors || {};
+
+                    // Системная ошибка (исключение в processBatch)
+                    if (result.status === 'error' && result.errorMessage) {
+                        allErrors.push({
+                            type: 'system',
+                            code: 'PROCESSING_EXCEPTION',
+                            message: result.errorMessage
+                        });
+                    }
 
                     window.RwbImportErrorHandler.showImportErrors(
                         allErrors, gridErrors, result.successCount || 0, container, false
                     );
 
-                    // Вычисляем successRows: все строки, которых нет в ошибках
-                    var successRows = this._buildSuccessRows(
+                    var successRows = self._buildSuccessRows(
                         result.totalRows || 0, gridErrors
                     );
 
@@ -108,20 +140,91 @@
                         window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
                     }
 
-                    this._updateButtonText(importBtn);
-                }.bind(this));
+                    // После импорта — возврат к начальному состоянию
+                    self._resetToolbar();
+                    self.lastReadyCount = null;
+                });
 
-            }.bind(this)).catch(function (error) {
-                this.setLoading(importBtn, false, originalText);
-                this._showError(error, container);
-            }.bind(this));
+            }).catch(function (error) {
+                self.setLoading(self.importBtn, false, originalText);
+                self._showError(error, container);
+            });
+        },
+
+        // ----------------------------------------------------------------
+        //  Управление toolbar
+        // ----------------------------------------------------------------
+
+        /**
+         * Показывает состояние после проверки
+         */
+        _showPostCheckState: function (readyCount) {
+            var actionsWrap = BX('rwb-import-actions');
+            var nothingMsg = BX('rwb-import-nothing');
+            var cabinetsWrap = BX('rwb-create-cabinets-wrap');
+
+            // Скрываем кнопку «Проверить»
+            this.checkBtn.style.display = 'none';
+
+            if (readyCount > 0) {
+                // Показываем блок с кнопкой импорта
+                if (actionsWrap) {
+                    actionsWrap.style.display = '';
+                }
+                if (nothingMsg) {
+                    nothingMsg.style.display = 'none';
+                }
+
+                // Toggle кабинетов — только для компаний
+                if (cabinetsWrap) {
+                    var entityType = this.getEntityType();
+                    cabinetsWrap.style.display = (entityType === 'company') ? '' : 'none';
+                }
+
+                // Текст кнопки импорта
+                if (this.importBtn) {
+                    this.importBtn.textContent = 'Импортировать компании (' + readyCount + ' шт.)';
+                    this.importBtn.disabled = false;
+                }
+            } else {
+                // Нет компаний для добавления
+                if (actionsWrap) {
+                    actionsWrap.style.display = 'none';
+                }
+                if (nothingMsg) {
+                    nothingMsg.style.display = '';
+                }
+            }
+        },
+
+        /**
+         * Возврат toolbar в начальное состояние (только «Проверить»)
+         */
+        _resetToolbar: function () {
+            var actionsWrap = BX('rwb-import-actions');
+            var nothingMsg = BX('rwb-import-nothing');
+
+            this.checkBtn.style.display = '';
+
+            if (actionsWrap) {
+                actionsWrap.style.display = 'none';
+            }
+            if (nothingMsg) {
+                nothingMsg.style.display = 'none';
+            }
+        },
+
+        // ----------------------------------------------------------------
+        //  Helpers
+        // ----------------------------------------------------------------
+
+        _getCreateCabinets: function () {
+            var toggle = BX('rwb-create-cabinets');
+            return toggle && toggle.checked;
         },
 
         /**
          * Собирает плоский массив ошибок из grid-формата
-         *
-         * @param {Object} errorsObj
-         * @returns {Array}
          */
         _collectErrors: function (errorsObj) {
             var allErrors = [];
@@ -133,7 +236,6 @@
                             allErrors.push(error);
                         });
                     } else if (rowErrors && typeof rowErrors === 'object') {
-                        // Если это объект, а не массив
                         allErrors.push(rowErrors);
                     }
                 });
@@ -143,10 +245,6 @@
 
         /**
          * Строит объект успешных строк из общего числа минус ошибочные
-         *
-         * @param {number} totalRows Общее количество строк
-         * @param {Object} gridErrors Ошибки по индексам строк
-         * @returns {Object} Объект с ключами — индексами успешных строк
          */
         _buildSuccessRows: function (totalRows, gridErrors) {
             var successRows = {};
@@ -158,12 +256,6 @@
             return successRows;
         },
 
-        /**
-         * Показывает ошибку
-         *
-         * @param {Object} error
-         * @param {HTMLElement} container
-         */
         _showError: function (error, container) {
             var errors = window.RwbImportErrorHandler.parseBitrixError(error);
             if (errors.length === 0) {
@@ -173,22 +265,7 @@
         },
 
         /**
-         * Обновляет текст кнопки по состоянию toggle
-         *
-         * @param {HTMLElement} btn
-         */
-        _updateButtonText: function (btn) {
-            var dryRunToggle = BX('rwb-import-dry-run');
-            var isDryRun = dryRunToggle && dryRunToggle.checked;
-            btn.textContent = isDryRun ? 'Проверить' : 'Импортировать';
-        },
-
-        /**
          * Устанавливает состояние загрузки для кнопки
-         *
-         * @param {HTMLElement} button
-         * @param {boolean} isLoading
-         * @param {string} text
          */
         setLoading: function (button, isLoading, text) {
             button.disabled = isLoading;

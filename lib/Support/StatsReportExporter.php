@@ -3,6 +3,7 @@
 namespace Rwb\Massops\Support;
 
 use Bitrix\Main\Application;
+use Bitrix\Main\Loader;
 use Bitrix\Main\UserTable;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -32,12 +33,12 @@ class StatsReportExporter
         $summarySheet->setTitle('Сводка');
         self::fillSummarySheet($summarySheet, $job, $entityTitle);
 
-        // Лист 2: Добавленные сущности (только ID без ссылок)
+        // Лист 2: Добавленные сущности (ID + название)
         $createdIds = !empty($job['CREATED_IDS']) ? unserialize($job['CREATED_IDS']) : [];
         if (!empty($createdIds)) {
             $entitiesSheet = $spreadsheet->createSheet();
             $entitiesSheet->setTitle('Добавленные');
-            self::fillEntitiesSheet($entitiesSheet, $createdIds);
+            self::fillEntitiesSheet($entitiesSheet, $createdIds, $job['ENTITY_TYPE']);
         }
 
         // Лист 3: Ошибки (если есть)
@@ -99,25 +100,81 @@ class StatsReportExporter
     }
 
     /**
-     * Заполняет лист с добавленными сущностями (только ID)
+     * Заполняет лист с добавленными сущностями (ID + название)
      */
-    private static function fillEntitiesSheet(Worksheet $sheet, array $createdIds): void
+    private static function fillEntitiesSheet(Worksheet $sheet, array $createdIds, string $entityType): void
     {
         // Заголовки
         $sheet->setCellValue('A1', '№');
         $sheet->setCellValue('B1', 'ID');
+        $sheet->setCellValue('C1', 'Название');
 
-        self::applyHeaderStyle($sheet, 'A1:B1');
+        self::applyHeaderStyle($sheet, 'A1:C1');
+
+        // Получаем названия сущностей
+        $titles = self::getEntityTitles($createdIds, $entityType);
 
         $row = 2;
         foreach ($createdIds as $index => $id) {
             $sheet->setCellValue('A' . $row, $index + 1);
             $sheet->setCellValue('B' . $row, $id);
+            $sheet->setCellValue('C' . $row, $titles[$id] ?? '—');
             $row++;
         }
 
         $sheet->getColumnDimension('A')->setAutoSize(true);
         $sheet->getColumnDimension('B')->setAutoSize(true);
+        $sheet->getColumnDimension('C')->setAutoSize(true);
+    }
+
+    /**
+     * Получает названия сущностей по их ID
+     *
+     * @param array $ids ID сущностей
+     * @param string $entityType Тип сущности (company, contact)
+     *
+     * @return array<int, string> ID => название
+     */
+    private static function getEntityTitles(array $ids, string $entityType): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        Loader::requireModule('crm');
+
+        $titles = [];
+
+        switch ($entityType) {
+            case 'company':
+                $rsCompanies = \CCrmCompany::GetListEx(
+                    [],
+                    ['@ID' => $ids, 'CHECK_PERMISSIONS' => 'N'],
+                    false,
+                    false,
+                    ['ID', 'TITLE']
+                );
+                while ($company = $rsCompanies->Fetch()) {
+                    $titles[(int)$company['ID']] = $company['TITLE'] ?? '';
+                }
+                break;
+
+            case 'contact':
+                $rsContacts = \CCrmContact::GetListEx(
+                    [],
+                    ['@ID' => $ids, 'CHECK_PERMISSIONS' => 'N'],
+                    false,
+                    false,
+                    ['ID', 'NAME', 'LAST_NAME']
+                );
+                while ($contact = $rsContacts->Fetch()) {
+                    $fullName = trim(($contact['LAST_NAME'] ?? '') . ' ' . ($contact['NAME'] ?? ''));
+                    $titles[(int)$contact['ID']] = $fullName ?: '—';
+                }
+                break;
+        }
+
+        return $titles;
     }
 
     /**
@@ -129,6 +186,9 @@ class StatsReportExporter
         $sheet->setCellValue('B1', 'Ошибка');
 
         self::applyHeaderStyle($sheet, 'A1:B1');
+
+        // Сортируем ошибки по номеру строки
+        ksort($errors, SORT_NUMERIC);
 
         $row = 2;
         foreach ($errors as $rowIndex => $rowErrors) {

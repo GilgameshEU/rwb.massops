@@ -11,6 +11,7 @@ use Bitrix\Main\Engine\CurrentUser;
 use Bitrix\Main\Entity\ExpressionField;
 use Bitrix\Main\Loader;
 use Bitrix\Main\LoaderException;
+use Bitrix\Main\UI\PageNavigation;
 use Bitrix\Main\UserTable;
 use Rwb\Massops\EntityRegistry;
 use Rwb\Massops\Import\FieldValidator;
@@ -63,13 +64,12 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'getStats' => ['prefilters' => []],
             'downloadErrorReport' => ['prefilters' => []],
             'downloadStatsReport' => ['prefilters' => []],
-            // Обратная совместимость
-            'importCompanies' => ['prefilters' => []],
-            'dryRunImport' => ['prefilters' => []],
         ];
     }
 
     private const GRID_ID = 'RWB_MASSOPS_GRID';
+    private const GRID_DEFAULT_PAGE_SIZE = 50;
+    private const GRID_ALLOWED_PAGE_SIZES = [20, 50, 100, 200, 500];
 
     /**
      * Основной метод выполнения компонента
@@ -88,15 +88,30 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $this->arResult['GRID_COLUMNS'] = SessionStorage::getColumns();
 
         // Получаем строки и применяем сортировку
-        $rows = SessionStorage::getRows();
+        $allRows = SessionStorage::getRows();
         $sort = $this->getGridSort();
 
-        if (!empty($sort['by']) && !empty($rows)) {
-            $rows = GridDataConverter::sortRows($rows, $sort['by'], $sort['order']);
+        if (!empty($sort['by']) && !empty($allRows)) {
+            $allRows = GridDataConverter::sortRows($allRows, $sort['by'], $sort['order']);
         }
 
-        $this->arResult['GRID_ROWS'] = $rows;
+        // Пагинация с учётом выбора пользователя
+        $pageSize = $this->getGridPageSize();
+        $totalRows = count($allRows);
+
+        $nav = new PageNavigation('rwb-grid-nav');
+        $nav->allowAllRecords(false);
+        $nav->setPageSize($pageSize);
+        $nav->setRecordCount($totalRows);
+        $nav->initFromUri();
+
+        $offset = $nav->getOffset();
+        $pageRows = array_slice($allRows, $offset, $pageSize);
+
+        $this->arResult['GRID_ROWS'] = $pageRows;
         $this->arResult['GRID_SORT'] = $sort;
+        $this->arResult['GRID_NAV'] = $nav;
+        $this->arResult['GRID_TOTAL_ROWS'] = $totalRows;
 
         $this->includeComponentTemplate();
     }
@@ -119,6 +134,28 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $order = current($sort) ?: 'ASC';
 
         return ['by' => $by, 'order' => $order];
+    }
+
+    /**
+     * Получает размер страницы грида из настроек пользователя
+     *
+     * @return int
+     */
+    private function getGridPageSize(): int
+    {
+        $gridOptions = new \Bitrix\Main\Grid\Options(self::GRID_ID);
+        $navParams = $gridOptions->GetNavParams([
+            'nPageSize' => self::GRID_DEFAULT_PAGE_SIZE,
+        ]);
+
+        $pageSize = (int) ($navParams['nPageSize'] ?? self::GRID_DEFAULT_PAGE_SIZE);
+
+        // Проверяем допустимость значения
+        if (!in_array($pageSize, self::GRID_ALLOWED_PAGE_SIZES, true)) {
+            $pageSize = self::GRID_DEFAULT_PAGE_SIZE;
+        }
+
+        return $pageSize;
     }
 
     /**
@@ -454,18 +491,53 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
         // При завершении — отдаём ошибки для подсветки грида
         if ($isComplete && !empty($job['ERRORS_DATA'])) {
-            $errors = unserialize($job['ERRORS_DATA']);
-            $gridErrors = [];
+            try {
+                $errors = unserialize($job['ERRORS_DATA']);
 
-            foreach ($errors as $rowIndex => $rowErrors) {
-                $gridErrors[$rowIndex] = array_map(
-                    fn($error) => $error->toArray(),
-                    $rowErrors
-                );
+                if (is_array($errors)) {
+                    $gridErrors = [];
+
+                    // Извлекаем системную ошибку (исключение из processBatch)
+                    if (isset($errors['__exception__'])) {
+                        $exceptionErrors = $errors['__exception__'];
+                        unset($errors['__exception__']);
+
+                        if (is_array($exceptionErrors)) {
+                            foreach ($exceptionErrors as $err) {
+                                if (is_object($err) && method_exists($err, 'toArray')) {
+                                    $response['errorMessage'] = $err->message ?? $err->toArray()['message'] ?? null;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    foreach ($errors as $rowIndex => $rowErrors) {
+                        if (!is_array($rowErrors)) {
+                            continue;
+                        }
+                        $gridErrors[$rowIndex] = array_map(
+                            function ($error) {
+                                if (is_object($error) && method_exists($error, 'toArray')) {
+                                    return $error->toArray();
+                                }
+                                return is_array($error) ? $error : ['message' => (string) $error];
+                            },
+                            $rowErrors
+                        );
+                    }
+
+                    $response['errors'] = $gridErrors;
+                    $response['fieldToColumn'] = $this->getFieldToColumnMapping($job['ENTITY_TYPE']);
+                }
+            } catch (\Throwable) {
+                // Битые данные — не ломаем ответ
             }
+        }
 
-            $response['errors'] = $gridErrors;
-            $response['fieldToColumn'] = $this->getFieldToColumnMapping($job['ENTITY_TYPE']);
+        // Если статус error но нет конкретного errorMessage — даём generic
+        if ($job['STATUS'] === ImportJobStatus::Error->value && empty($response['errorMessage'])) {
+            $response['errorMessage'] = 'Произошла системная ошибка при обработке импорта';
         }
 
         return $response;
@@ -574,30 +646,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
                 'totalPages' => $totalPages,
             ],
         ];
-    }
-
-    /**
-     * Обратная совместимость: импорт компаний
-     *
-     * @return array
-     */
-    public function importCompaniesAction(): array
-    {
-        SessionStorage::saveEntityType('company');
-
-        return $this->runImportAction();
-    }
-
-    /**
-     * Обратная совместимость: dry run
-     *
-     * @return array
-     */
-    public function dryRunImportAction(): array
-    {
-        SessionStorage::saveEntityType('company');
-
-        return $this->runDryRunAction();
     }
 
     /**

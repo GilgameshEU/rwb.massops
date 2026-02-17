@@ -4,6 +4,7 @@ namespace Rwb\Massops\Import;
 
 use Bitrix\Main\ArgumentException;
 use Bitrix\Main\InvalidOperationException;
+use Bitrix\Main\Loader;
 use Bitrix\Main\LoaderException;
 use Rwb\Massops\Repository\CrmRepository;
 use Rwb\Massops\Service\DuplicateChecker;
@@ -19,8 +20,15 @@ use Rwb\Massops\Support\UserFieldHelper;
  */
 class CompanyImportService extends ImportService
 {
+    /**
+     * UTM-метка источника для сквозной аналитики
+     */
+    private const TRACKING_UTM_SOURCE = 'rwb.massops';
+
     private DuplicateChecker $duplicateChecker;
     private ?string $innFieldCode = null;
+    private ?int $trackingSourceId = null;
+    private bool $trackingSourceResolved = false;
 
     public function __construct(
         CrmRepository $repository,
@@ -45,6 +53,9 @@ class CompanyImportService extends ImportService
     {
         // Получаем коды полей из заголовков файла (если переданы колонки)
         $fieldCodes = $this->resolveFieldCodes($options['columns'] ?? []);
+        $fieldTypes = $this->repository->getFieldTypeMap();
+        $multipleFields = $this->repository->getMultipleFieldCodes();
+        $enumMappings = $this->repository->getEnumMappings();
         $extractor = new ErrorFieldExtractor($this->repository->getFieldList());
         $innFieldCode = $this->getInnFieldCode();
 
@@ -75,12 +86,18 @@ class CompanyImportService extends ImportService
 
             $normalized = $this->normalizer->normalize(
                 array_values($row['data']),
-                $fieldCodes
+                $fieldCodes,
+                $fieldTypes,
+                $multipleFields,
+                $enumMappings
             );
 
             $fields = $normalized->fields;
             $uf = $normalized->uf;
             $fm = $normalized->fm;
+
+            // Резолюция полей типа "Пользователь" (ASSIGNED_BY_ID и др.)
+            $userErrors = $this->resolveUserFields($fields, $fieldTypes);
 
             // Применяем опции импорта
             $this->applyImportOptions($uf, $options);
@@ -93,6 +110,14 @@ class CompanyImportService extends ImportService
             ];
 
             $hasErrors = false;
+
+            // Ошибки резолюции пользователей
+            if (!empty($userErrors)) {
+                foreach ($userErrors as $error) {
+                    $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
+                }
+                $hasErrors = true;
+            }
 
             // Ошибки нормализации
             if (!empty($normalized->errors)) {
@@ -158,13 +183,20 @@ class CompanyImportService extends ImportService
                 continue;
             }
 
+            $entityId = !$dryRun && method_exists($result, 'getId')
+                ? $result->getId()
+                : null;
+
+            // Привязываем источник сквозной аналитики
+            if ($entityId && !$dryRun) {
+                $this->assignTrackingSource($entityId);
+            }
+
             $success++;
             $items[$rowIndex] = [
                 'row' => $rowIndex + 1,
                 'data' => $data['fields'],
-                'entityId' => !$dryRun && method_exists($result, 'getId')
-                    ? $result->getId()
-                    : null,
+                'entityId' => $entityId,
             ];
         }
 
@@ -250,5 +282,45 @@ class CompanyImportService extends ImportService
         }
 
         return $this->innFieldCode;
+    }
+
+    /**
+     * Возвращает ID источника сквозной аналитики по UTM-метке
+     */
+    private function getTrackingSourceId(): ?int
+    {
+        if (!$this->trackingSourceResolved) {
+            $this->trackingSourceResolved = true;
+
+            Loader::requireModule('crm');
+
+            if (class_exists('\Bitrix\Crm\Tracking\Internals\SourceTable')) {
+                $this->trackingSourceId = \Bitrix\Crm\Tracking\Internals\SourceTable::getSourceByUtmSource(
+                    self::TRACKING_UTM_SOURCE
+                );
+            }
+        }
+
+        return $this->trackingSourceId;
+    }
+
+    /**
+     * Привязывает источник сквозной аналитики к созданной компании
+     *
+     * @param int $entityId ID созданной компании
+     */
+    private function assignTrackingSource(int $entityId): void
+    {
+        $sourceId = $this->getTrackingSourceId();
+        if (!$sourceId) {
+            return;
+        }
+
+        \Bitrix\Crm\Tracking\UI\Details::saveEntityData(
+            \CCrmOwnerType::Company,
+            $entityId,
+            ['TRACKING_SOURCE_ID' => $sourceId],
+            true
+        );
     }
 }

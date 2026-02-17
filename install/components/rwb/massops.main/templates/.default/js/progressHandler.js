@@ -84,7 +84,12 @@
                     'completed': 'Завершено',
                     'error': 'Ошибка'
                 };
-                labelEl.textContent = statusText[data.status] || 'Импорт...';
+
+                if (data.status === 'error' && data.errorMessage) {
+                    labelEl.textContent = 'Ошибка: ' + data.errorMessage;
+                } else {
+                    labelEl.textContent = statusText[data.status] || 'Импорт...';
+                }
             }
 
             if (statsEl) {

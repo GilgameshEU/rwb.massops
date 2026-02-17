@@ -88,6 +88,7 @@ class rwb_massops extends CModule
         $this->installEvents();
         $this->installFiles();
         $this->installMenu();
+        $this->installTrackingSource();
 
         return true;
     }
@@ -117,6 +118,7 @@ class rwb_massops extends CModule
             return true;
         }
 
+        $this->unInstallTrackingSource();
         $this->unInstallMenu();
         $this->unInstallFiles();
         $this->unInstallEvents();
@@ -443,6 +445,103 @@ class rwb_massops extends CModule
 
         // Удаляем пункт меню
         MenuInstaller::uninstallMenu();
+    }
+
+    /**
+     * UTM-метка источника сквозной аналитики
+     */
+    private const TRACKING_UTM_SOURCE = 'rwb.massops';
+
+    /**
+     * Название источника сквозной аналитики
+     */
+    private const TRACKING_SOURCE_NAME = 'RWB Массовые операции';
+
+    /**
+     * Цвет иконки источника
+     */
+    private const TRACKING_SOURCE_COLOR = '#3F51B5';
+
+    /**
+     * Создаёт источник сквозной аналитики при установке модуля
+     */
+    private function installTrackingSource(): void
+    {
+        try {
+            if (!Loader::includeModule('crm')) {
+                return;
+            }
+
+            if (!class_exists('\Bitrix\Crm\Tracking\Internals\SourceTable')) {
+                return;
+            }
+
+            // Проверяем, не существует ли уже такой источник
+            $existingId = \Bitrix\Crm\Tracking\Internals\SourceTable::getSourceByUtmSource(
+                self::TRACKING_UTM_SOURCE
+            );
+
+            if ($existingId) {
+                return;
+            }
+
+            // Создаём источник
+            $result = \Bitrix\Crm\Tracking\Internals\SourceTable::add([
+                'NAME' => self::TRACKING_SOURCE_NAME,
+                'ICON_COLOR' => self::TRACKING_SOURCE_COLOR,
+            ]);
+
+            if ($result->isSuccess()) {
+                $sourceId = $result->getId();
+
+                // Привязываем UTM_SOURCE
+                \Bitrix\Crm\Tracking\Internals\SourceFieldTable::setSourceField(
+                    $sourceId,
+                    \Bitrix\Crm\Tracking\Internals\SourceFieldTable::FIELD_UTM_SOURCE,
+                    [self::TRACKING_UTM_SOURCE]
+                );
+            }
+        } catch (\Throwable $e) {
+            // Не блокируем установку модуля при ошибке создания источника
+        }
+    }
+
+    /**
+     * Удаляет источник сквозной аналитики при удалении модуля
+     */
+    private function unInstallTrackingSource(): void
+    {
+        try {
+            if (!Loader::includeModule('crm')) {
+                return;
+            }
+
+            if (!class_exists('\Bitrix\Crm\Tracking\Internals\SourceTable')) {
+                return;
+            }
+
+            $sourceId = \Bitrix\Crm\Tracking\Internals\SourceTable::getSourceByUtmSource(
+                self::TRACKING_UTM_SOURCE
+            );
+
+            if (!$sourceId) {
+                return;
+            }
+
+            // Удаляем поля источника
+            $fields = \Bitrix\Crm\Tracking\Internals\SourceFieldTable::getList([
+                'filter' => ['=SOURCE_ID' => $sourceId],
+            ]);
+
+            while ($field = $fields->fetch()) {
+                \Bitrix\Crm\Tracking\Internals\SourceFieldTable::delete($field['ID']);
+            }
+
+            // Удаляем сам источник
+            \Bitrix\Crm\Tracking\Internals\SourceTable::delete($sourceId);
+        } catch (\Throwable $e) {
+            // Не блокируем удаление модуля при ошибке
+        }
     }
 
     /**

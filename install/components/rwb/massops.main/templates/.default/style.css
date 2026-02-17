@@ -410,7 +410,21 @@
     color: #333;
 }
 
-/* ===== Toggle (dry-run) ===== */
+/* Контейнер кнопки импорта + toggle кабинетов */
+#rwb-import-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+/* Надпись «Нет компаний для добавления» */
+.rwb-preview__nothing {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e53935;
+}
+
+/* ===== Toggle ===== */
 
 .rwb-toggle {
     display: flex;
@@ -608,6 +622,22 @@
 
 .rwb-result-download {
     margin-top: 12px;
+}
+
+/* Секции группированных ошибок */
+.rwb-error-section {
+    margin-top: 12px;
+}
+
+.rwb-error-section:first-child {
+    margin-top: 0;
+}
+
+.rwb-error-section-title {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: inherit;
 }
 
 /* ===== Прогресс-бар импорта ===== */

@@ -35,6 +35,21 @@ final class CrmRepository
      */
     private ?array $fieldMetaCache = null;
 
+    /**
+     * Кэш карты типов полей (per-instance)
+     */
+    private ?array $fieldTypeMapCache = null;
+
+    /**
+     * Кэш кодов множественных полей (per-instance)
+     */
+    private ?array $multipleFieldCodesCache = null;
+
+    /**
+     * Кэш маппинга enum: текст → ID
+     */
+    private ?array $enumMappingsCache = null;
+
     public function __construct(
         private readonly EntityType $entityType
     ) {
@@ -173,6 +188,75 @@ final class CrmRepository
         }
 
         return $required;
+    }
+
+    /**
+     * Возвращает карту типов полей: fieldCode => typeId
+     *
+     * Для стандартных полей CRM возвращает тип из Field::getType().
+     * Для UF-полей — USER_TYPE_ID (date, datetime, string, integer и т.д.).
+     *
+     * @return array<string, string>
+     * @throws LoaderException
+     */
+    public function getFieldTypeMap(): array
+    {
+        if ($this->fieldTypeMapCache !== null) {
+            return $this->fieldTypeMapCache;
+        }
+
+        $this->fieldTypeMapCache = [];
+        $fields = $this->getFactory()->getFieldsCollection();
+        $ufFieldsInfo = $this->getUfFieldsInfo();
+
+        foreach ($fields as $field) {
+            if ($this->isFieldExcluded($field)) {
+                continue;
+            }
+
+            $fieldName = $field->getName();
+
+            if ($fieldName === Item::FIELD_NAME_FM) {
+                $this->fieldTypeMapCache['PHONE'] = 'string';
+                $this->fieldTypeMapCache['EMAIL'] = 'string';
+                continue;
+            }
+
+            // Для UF-полей берём USER_TYPE_ID
+            if (str_starts_with($fieldName, 'UF_') && isset($ufFieldsInfo[$fieldName])) {
+                $this->fieldTypeMapCache[$fieldName] = $ufFieldsInfo[$fieldName]['USER_TYPE_ID'] ?? 'string';
+                continue;
+            }
+
+            // Для стандартных полей маппим тип
+            $this->fieldTypeMapCache[$fieldName] = $field->getType();
+        }
+
+        return $this->fieldTypeMapCache;
+    }
+
+    /**
+     * Возвращает коды UF-полей с MULTIPLE=Y
+     *
+     * @return string[]
+     * @throws LoaderException
+     */
+    public function getMultipleFieldCodes(): array
+    {
+        if ($this->multipleFieldCodesCache !== null) {
+            return $this->multipleFieldCodesCache;
+        }
+
+        $this->multipleFieldCodesCache = [];
+        $ufFieldsInfo = $this->getUfFieldsInfo();
+
+        foreach ($ufFieldsInfo as $fieldName => $fieldData) {
+            if (($fieldData['MULTIPLE'] ?? 'N') === 'Y') {
+                $this->multipleFieldCodesCache[] = $fieldName;
+            }
+        }
+
+        return $this->multipleFieldCodesCache;
     }
 
     /**
@@ -409,6 +493,42 @@ final class CrmRepository
     }
 
     /**
+     * Возвращает маппинг текстовых значений → ID/XML_ID для всех enum-полей
+     *
+     * Используется при импорте: пользователь вводит текст «Производство»,
+     * а Bitrix ожидает STATUS_ID или XML_ID.
+     *
+     * @return array<string, array<string, string>> ['FIELD_CODE' => ['Текст' => 'id', ...], ...]
+     * @throws LoaderException
+     */
+    public function getEnumMappings(): array
+    {
+        if ($this->enumMappingsCache !== null) {
+            return $this->enumMappingsCache;
+        }
+
+        $this->enumMappingsCache = [];
+        $templateFields = $this->getFieldsForTemplate();
+
+        foreach ($templateFields as $code => $fieldData) {
+            if (empty($fieldData['enumValues'])) {
+                continue;
+            }
+
+            $mapping = [];
+            foreach ($fieldData['enumValues'] as $item) {
+                $mapping[$item['value']] = (string) $item['id'];
+            }
+
+            if (!empty($mapping)) {
+                $this->enumMappingsCache[$code] = $mapping;
+            }
+        }
+
+        return $this->enumMappingsCache;
+    }
+
+    /**
      * Получает значения enum для списочных полей
      */
     private function getEnumValues(object $field, array $fieldInfo): ?array
@@ -476,7 +596,7 @@ final class CrmRepository
 
             while ($enum = $rsEnum->Fetch()) {
                 $items[] = [
-                    'id' => $enum['XML_ID'] ?: $enum['ID'],
+                    'id' => (string) $enum['ID'],
                     'value' => $enum['VALUE'],
                 ];
             }

@@ -18,18 +18,9 @@ BX.ready(function () {
     var uploadBtn = BX('rwb-wizard-upload');
     var backBtn3 = BX('rwb-wizard-back-3');
     var clearBtn = BX('rwb-import-clear');
-    var importBtn = BX('rwb-import-run');
+    var checkBtn = BX('rwb-import-run');
+    var importBtn = BX('rwb-import-start');
     var templateLink = BX('rwb-import-template');
-    var dryRunToggle = BX('rwb-import-dry-run');
-    var createCabinetsWrap = BX('rwb-create-cabinets-wrap');
-    var createCabinetsToggle = BX('rwb-create-cabinets');
-
-    // Функция показа/скрытия чекбокса кабинетов
-    function updateCabinetsCheckbox(entityType) {
-        if (createCabinetsWrap) {
-            createCabinetsWrap.style.display = (entityType === 'company') ? '' : 'none';
-        }
-    }
 
     // --- 1. Табы ---
     window.RwbTabManager.init();
@@ -48,14 +39,11 @@ BX.ready(function () {
         if (nextBtn1) {
             nextBtn1.disabled = false;
         }
-        // Показать/скрыть чекбокс кабинетов
-        updateCabinetsCheckbox(entityType);
     }, config.currentEntityType);
 
-    // Если есть предвыбранная сущность — активировать кнопку и чекбокс
+    // Если есть предвыбранная сущность — активировать кнопку
     if (config.currentEntityType && nextBtn1) {
         nextBtn1.disabled = false;
-        updateCabinetsCheckbox(config.currentEntityType);
     }
 
     // --- 4. Dropzone ---
@@ -107,36 +95,12 @@ BX.ready(function () {
         window.RwbImportTemplateHandler.init(templateLink, getEntityType);
     }
 
-    // --- 8. Import / Dry Run ---
-    if (importBtn) {
-        window.RwbImportImportHandler.init(importBtn, getEntityType);
+    // --- 8. Import (проверка + импорт) ---
+    if (checkBtn) {
+        window.RwbImportImportHandler.init(checkBtn, importBtn, getEntityType);
     }
 
-    // --- 9. Dry Run toggle — меняет текст кнопки и управляет чекбоксом кабинетов ---
-    function updateCabinetsDisabledState() {
-        if (createCabinetsToggle) {
-            var isDryRun = dryRunToggle && dryRunToggle.checked;
-            createCabinetsToggle.disabled = isDryRun;
-            if (isDryRun) {
-                createCabinetsToggle.checked = false;
-            }
-            // Визуально показываем неактивное состояние
-            if (createCabinetsWrap) {
-                createCabinetsWrap.classList.toggle('rwb-toggle--disabled', isDryRun);
-            }
-        }
-    }
-
-    if (dryRunToggle && importBtn) {
-        dryRunToggle.addEventListener('change', function () {
-            importBtn.textContent = dryRunToggle.checked ? 'Проверить' : 'Импортировать';
-            updateCabinetsDisabledState();
-        });
-        // Инициализация при загрузке
-        updateCabinetsDisabledState();
-    }
-
-    // --- 10. Clear ---
+    // --- 9. Clear ---
     if (clearBtn) {
         clearBtn.addEventListener('click', function () {
             BX.ajax.runComponentAction('rwb:massops.main', 'clear', {
@@ -147,7 +111,7 @@ BX.ready(function () {
         });
     }
 
-    // --- 11. Stats tab (lazy-load при переключении) ---
+    // --- 10. Stats tab (lazy-load при переключении) ---
     window.RwbStatsHandler.init();
 
     var origSwitchTo = window.RwbTabManager.switchTo.bind(window.RwbTabManager);
