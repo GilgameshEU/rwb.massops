@@ -86,7 +86,7 @@ class ImportAgent
      * При ошибке основного пути пробует fallback-пути.
      * Лог: /upload/rwb_massops_logs/import_YYYY-MM-DD.log
      */
-    private static function log(string $message): void
+    public static function log(string $message): void
     {
         $logLine = '[' . date('Y-m-d H:i:s') . '] ' . $message . "\n";
 

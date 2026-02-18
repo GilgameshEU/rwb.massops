@@ -139,27 +139,27 @@ class StatsReportExporter
 
         switch ($entityType) {
             case 'company':
-                $rsCompanies = \CCrmCompany::GetListEx(
+                $rsCompanies = \CCrmCompany::getListEx(
                     [],
                     ['@ID' => $ids, 'CHECK_PERMISSIONS' => 'N'],
                     false,
                     false,
                     ['ID', 'TITLE']
                 );
-                while ($company = $rsCompanies->Fetch()) {
+                while ($company = $rsCompanies->fetch()) {
                     $titles[(int)$company['ID']] = $company['TITLE'] ?? '';
                 }
                 break;
 
             case 'contact':
-                $rsContacts = \CCrmContact::GetListEx(
+                $rsContacts = \CCrmContact::getListEx(
                     [],
                     ['@ID' => $ids, 'CHECK_PERMISSIONS' => 'N'],
                     false,
                     false,
                     ['ID', 'NAME', 'LAST_NAME']
                 );
-                while ($contact = $rsContacts->Fetch()) {
+                while ($contact = $rsContacts->fetch()) {
                     $fullName = trim(($contact['LAST_NAME'] ?? '') . ' ' . ($contact['NAME'] ?? ''));
                     $titles[(int)$contact['ID']] = $fullName ?: '—';
                 }

@@ -29,22 +29,32 @@ final class CrmRepository
     private const EXCLUDED_FIELDS = [
         'OPENED',
     ];
-
+    /**
+     * Фоллбэк-маппинг стандартных CRM_STATUS полей на entity_id справочника.
+     *
+     * Bitrix Factory не всегда объявляет CRM_STATUS_TYPE в getFieldsSettings()
+     */
+    private const CRM_STATUS_FIELD_MAP = [
+        'SOURCE_ID' => 'SOURCE',
+        'COMPANY_TYPE' => 'COMPANY_TYPE',
+        'INDUSTRY' => 'INDUSTRY',
+        'EMPLOYEES' => 'EMPLOYEES',
+        'HONORIFIC' => 'HONORIFIC',
+        'CONTACT_TYPE' => 'CONTACT_TYPE',
+        'DEAL_TYPE' => 'DEAL_TYPE',
+    ];
     /**
      * Кэш метаданных полей (per-instance)
      */
     private ?array $fieldMetaCache = null;
-
     /**
      * Кэш карты типов полей (per-instance)
      */
     private ?array $fieldTypeMapCache = null;
-
     /**
      * Кэш кодов множественных полей (per-instance)
      */
     private ?array $multipleFieldCodesCache = null;
-
     /**
      * Кэш маппинга enum: текст → ID
      */
@@ -369,6 +379,7 @@ final class CrmRepository
                     'required' => false,
                     'type' => 'Строка',
                     'enumValues' => null,
+                    'multiple' => true,
                 ];
                 $result['EMAIL'] = [
                     'code' => 'EMAIL',
@@ -376,6 +387,7 @@ final class CrmRepository
                     'required' => false,
                     'type' => 'Строка',
                     'enumValues' => null,
+                    'multiple' => true,
                 ];
                 continue;
             }
@@ -388,12 +400,18 @@ final class CrmRepository
             $fieldType = $this->resolveFieldType($field, $extendedFieldInfo);
             $enumValues = $this->getEnumValues($field, $extendedFieldInfo);
 
+            $isMultiple = false;
+            if (str_starts_with($fieldName, 'UF_') && isset($ufFieldsInfo[$fieldName])) {
+                $isMultiple = ($ufFieldsInfo[$fieldName]['MULTIPLE'] ?? 'N') === 'Y';
+            }
+
             $result[$fieldName] = [
                 'code' => $fieldName,
                 'title' => $field->getTitle(),
                 'required' => $field->isRequired(),
                 'type' => $fieldType,
                 'enumValues' => $enumValues,
+                'multiple' => $isMultiple,
             ];
         }
 
@@ -410,13 +428,39 @@ final class CrmRepository
         $entityId = 'CRM_' . strtoupper($this->entityType->value);
         $result = [];
 
-        $rsFields = \CUserTypeEntity::GetList(
+        $rsFields = \CUserTypeEntity::getList(
             [],
             ['ENTITY_ID' => $entityId]
         );
 
-        while ($field = $rsFields->Fetch()) {
+        while ($field = $rsFields->fetch()) {
             $result[$field['FIELD_NAME']] = $field;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Возвращает настройки UF-полей: fieldCode => SETTINGS
+     *
+     * Для iblock_element/iblock_section содержит IBLOCK_ID.
+     *
+     * @return array<string, array>
+     */
+    public function getUfFieldsSettings(): array
+    {
+        $result = [];
+
+        foreach ($this->getUfFieldsInfo() as $fieldName => $fieldData) {
+            $settings = $fieldData['SETTINGS'] ?? [];
+
+            if (is_string($settings) && $settings !== '') {
+                $result[$fieldName] = unserialize($settings, ['allowed_classes' => false]) ?: [];
+            } elseif (is_array($settings)) {
+                $result[$fieldName] = $settings;
+            } else {
+                $result[$fieldName] = [];
+            }
         }
 
         return $result;
@@ -456,6 +500,10 @@ final class CrmRepository
 
         if (isset($typeMap[$type])) {
             return $typeMap[$type];
+        }
+
+        if (isset(self::CRM_STATUS_FIELD_MAP[$field->getName()])) {
+            return 'Справочник';
         }
 
         if (str_starts_with($field->getName(), 'UF_')) {
@@ -532,10 +580,17 @@ final class CrmRepository
         $fieldName = $field->getName();
 
         if ($type === Field::TYPE_CRM_STATUS) {
-            $statusEntityId = $fieldInfo['CRM_STATUS_TYPE'] ?? null;
+            $statusEntityId = $fieldInfo['CRM_STATUS_TYPE']
+                ?? $fieldInfo['SETTINGS']['ENTITY_TYPE']
+                ?? self::CRM_STATUS_FIELD_MAP[$fieldName]
+                ?? null;
             if ($statusEntityId) {
                 return $this->getCrmStatusItems($statusEntityId);
             }
+        }
+
+        if ($type !== Field::TYPE_CRM_STATUS && isset(self::CRM_STATUS_FIELD_MAP[$fieldName])) {
+            return $this->getCrmStatusItems(self::CRM_STATUS_FIELD_MAP[$fieldName]);
         }
 
         if (str_starts_with($fieldName, 'UF_')) {
@@ -556,7 +611,7 @@ final class CrmRepository
     {
         $items = [];
 
-        $statuses = \CCrmStatus::GetStatusList($entityId);
+        $statuses = \CCrmStatus::getStatusList($entityId);
         foreach ($statuses as $statusId => $statusName) {
             $items[] = [
                 'id' => $statusId,
@@ -576,18 +631,18 @@ final class CrmRepository
 
         $entityId = 'CRM_' . strtoupper($this->entityType->value);
 
-        $rsField = \CUserTypeEntity::GetList(
+        $rsField = \CUserTypeEntity::getList(
             [],
             ['ENTITY_ID' => $entityId, 'FIELD_NAME' => $fieldName]
         );
 
-        if ($field = $rsField->Fetch()) {
-            $rsEnum = \CUserFieldEnum::GetList(
+        if ($field = $rsField->fetch()) {
+            $rsEnum = \CUserFieldEnum::getList(
                 ['SORT' => 'ASC'],
                 ['USER_FIELD_ID' => $field['ID']]
             );
 
-            while ($enum = $rsEnum->Fetch()) {
+            while ($enum = $rsEnum->fetch()) {
                 $items[] = [
                     'id' => (string) $enum['ID'],
                     'value' => $enum['VALUE'],

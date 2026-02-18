@@ -55,6 +55,7 @@ class CompanyImportService extends ImportService
         $fieldTypes = $this->repository->getFieldTypeMap();
         $multipleFields = $this->repository->getMultipleFieldCodes();
         $enumMappings = $this->repository->getEnumMappings();
+        $ufSettings = $this->repository->getUfFieldsSettings();
         $extractor = new ErrorFieldExtractor($this->repository->getFieldList());
         $innFieldCode = $this->getInnFieldCode();
 
@@ -92,7 +93,9 @@ class CompanyImportService extends ImportService
             $uf = $normalized->uf;
             $fm = $normalized->fm;
 
-            $userErrors = $this->resolveUserFields($fields, $fieldTypes);
+            $userErrors = $this->resolveUserFields($fields, $uf, $fieldTypes);
+            $iblockErrors = $this->resolveIblockFields($uf, $fieldTypes, $ufSettings);
+            $crmRefErrors = $this->resolveCrmEntityFields($fields, $fieldTypes);
 
             $this->applyImportOptions($uf, $options);
 
@@ -105,8 +108,9 @@ class CompanyImportService extends ImportService
 
             $hasErrors = false;
 
-            if (!empty($userErrors)) {
-                foreach ($userErrors as $error) {
+            $resolutionErrors = array_merge($userErrors, $iblockErrors, $crmRefErrors);
+            if (!empty($resolutionErrors)) {
+                foreach ($resolutionErrors as $error) {
                     $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
                 }
                 $hasErrors = true;

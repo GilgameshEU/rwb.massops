@@ -3,7 +3,9 @@
   "description": "Mass operations module",
   "type": "bitrix-module",
   "require": {
-    "phpoffice/phpspreadsheet": "^2.1"
+    "phpoffice/phpspreadsheet": "^2.1",
+    "ext-mbstring": "*",
+    "ext-ctype": "*"
   },
   "config": {
     "platform": {

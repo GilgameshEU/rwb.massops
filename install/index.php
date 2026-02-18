@@ -87,7 +87,7 @@ class rwb_massops extends CModule
         $this->installDB();
         $this->installEvents();
         $this->installFiles();
-        $this->installMenu();
+        //$this->installMenu();
         $this->installTrackingSource();
 
         return true;
@@ -119,7 +119,7 @@ class rwb_massops extends CModule
         }
 
         $this->unInstallTrackingSource();
-        $this->unInstallMenu();
+        //$this->unInstallMenu();
         $this->unInstallFiles();
         $this->unInstallEvents();
         $this->unInstallDB();
@@ -451,12 +451,10 @@ class rwb_massops extends CModule
      * UTM-метка источника сквозной аналитики
      */
     private const TRACKING_UTM_SOURCE = 'rwb.massops';
-
     /**
      * Название источника сквозной аналитики
      */
     private const TRACKING_SOURCE_NAME = 'RWB Массовые операции';
-
     /**
      * Цвет иконки источника
      */

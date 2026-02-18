@@ -200,7 +200,7 @@ class DuplicateChecker
 
         $select = ['ID', $innFieldCode];
 
-        $rsCompanies = \CCrmCompany::GetListEx(
+        $rsCompanies = \CCrmCompany::getListEx(
             [],
             $filter,
             false,
@@ -208,7 +208,7 @@ class DuplicateChecker
             $select
         );
 
-        while ($company = $rsCompanies->Fetch()) {
+        while ($company = $rsCompanies->fetch()) {
             $inn = $this->normalizeInn($company[$innFieldCode] ?? '');
             if (!empty($inn)) {
                 $result[$inn] = (int) $company['ID'];

@@ -55,7 +55,7 @@ class UserResolver
             return $this->idCache[$id] ? $id : null;
         }
 
-        $user = \CUser::GetByID($id)->Fetch();
+        $user = \CUser::getByID($id)->fetch();
         $exists = ($user !== false && ($user['ACTIVE'] ?? 'N') === 'Y');
         $this->idCache[$id] = $exists;
 
@@ -98,7 +98,7 @@ class UserResolver
      */
     private function findUserByNameParts(string $firstName, string $lastName): ?int
     {
-        $rsUsers = \CUser::GetList(
+        $rsUsers = \CUser::getList(
             'ID',
             'ASC',
             [
@@ -109,7 +109,7 @@ class UserResolver
             ['FIELDS' => ['ID']]
         );
 
-        $user = $rsUsers->Fetch();
+        $user = $rsUsers->fetch();
 
         return $user ? (int) $user['ID'] : null;
     }

@@ -50,8 +50,11 @@ class ImportJobTable extends Entity\DataManager
             ]),
             new Entity\TextField('ERRORS_DATA', [
                 'long' => true,
+                'nullable' => true,
             ]),
-            new Entity\TextField('CREATED_IDS'),
+            new Entity\TextField('CREATED_IDS', [
+                'nullable' => true,
+            ]),
             new Entity\TextField('IMPORT_DATA', [
                 'required' => true,
                 'long' => true,
@@ -63,8 +66,12 @@ class ImportJobTable extends Entity\DataManager
                 'required' => true,
                 'default_value' => static fn() => new DateTime(),
             ]),
-            new Entity\DatetimeField('STARTED_AT'),
-            new Entity\DatetimeField('FINISHED_AT'),
+            new Entity\DatetimeField('STARTED_AT', [
+                'nullable' => true,
+            ]),
+            new Entity\DatetimeField('FINISHED_AT', [
+                'nullable' => true,
+            ]),
         ];
     }
 }

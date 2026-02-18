@@ -34,6 +34,49 @@ class XlsxTemplateExporter
     ];
 
     /**
+     * Подсказки по допустимым значениям для каждого типа поля
+     */
+    private const TYPE_HINTS = [
+        'Строка'              => 'Текстовое значение',
+        'Текст'               => 'Текстовое значение (многострочный)',
+        'Символ'              => 'Один символ (Y или N)',
+        'Целое число'         => 'Целое число. Пример: 42',
+        'Число'               => 'Число (допускается десятичная точка). Пример: 199.90',
+        'Да/Нет'              => 'Y — да, N — нет',
+        'Дата'                => 'Формат: ДД.ММ.ГГГГ. Пример: 25.12.2025',
+        'Дата и время'        => 'Формат: ДД.ММ.ГГГГ ЧЧ:ММ:СС. Пример: 25.12.2025 14:30:00',
+        'Пользователь'        => 'ID пользователя или Имя Фамилия. Пример: 1 или Иван Иванов',
+        'Сотрудник'           => 'ID пользователя или Имя Фамилия. Пример: 1 или Иван Иванов',
+        'Валюта'              => 'Код валюты. Пример: RUB, USD, EUR',
+        'Компания'            => 'ID компании в CRM. Пример: 123',
+        'Контакт'             => 'ID контакта в CRM. Пример: 456',
+        'Сделка'              => 'ID сделки в CRM. Пример: 789',
+        'Лид'                 => 'ID лида в CRM. Пример: 101',
+        'Предложение'         => 'ID предложения в CRM',
+        'Направление'         => 'ID направления сделки',
+        'Сущность CRM'        => 'ID сущности CRM',
+        'Местоположение'      => 'Текстовое описание местоположения',
+        'Деньги'              => 'Сумма (число). Пример: 15000.00',
+        'Ссылка'              => 'URL-адрес. Пример: https://example.com',
+        'Адрес'               => 'Полный адрес текстом',
+        'Элемент инфоблока'   => 'ID элемента или его название. Пример: 42 или Категория А',
+        'Раздел инфоблока'    => 'ID раздела или его название. Пример: 10 или Раздел Б',
+        'Привязка к CRM'      => 'ID сущности CRM',
+        'Справочник CRM'      => 'Значение из справочника CRM',
+        'Смарт-процесс'       => 'ID элемента смарт-процесса',
+        'Товар'               => 'ID товара в каталоге CRM',
+        'Мультиполе'          => 'Значение мультиполя',
+    ];
+
+    /**
+     * Подсказки для конкретных полей (приоритет выше TYPE_HINTS)
+     */
+    private const FIELD_HINTS = [
+        'PHONE' => 'Номер телефона в формате +7XXXXXXXXXX или 8XXXXXXXXXX. Несколько номеров через запятую',
+        'EMAIL' => 'Email-адрес. Несколько адресов через запятую. Пример: user@mail.ru, info@company.com',
+    ];
+
+    /**
      * Создаёт и отдаёт XLSX-шаблон для импорта
      *
      * @param array  $fieldsData  Полные данные о полях из getFieldsForTemplate()
@@ -131,20 +174,44 @@ class XlsxTemplateExporter
     {
         $sheet->setCellValue('A' . $row, $field['title']);
         $sheet->setCellValue('B' . $row, $field['type']);
-
-        $enumText = '';
-        if (!empty($field['enumValues'])) {
-            $values = array_map(
-                fn($item) => $item['value'],
-                $field['enumValues']
-            );
-            $enumText = implode(', ', $values);
-        }
-        $sheet->setCellValue('C' . $row, $enumText);
+        $sheet->setCellValue('C' . $row, self::getFieldHint($field));
 
         if ($isRequired) {
             self::applyRequiredRowStyle($sheet, $row);
         }
+    }
+
+    /**
+     * Формирует подсказку по допустимым значениям для поля
+     */
+    private static function getFieldHint(array $field): string
+    {
+        $code = $field['code'] ?? '';
+        $type = $field['type'] ?? '';
+        $isMultiple = $field['multiple'] ?? false;
+
+        if (isset(self::FIELD_HINTS[$code])) {
+            return self::FIELD_HINTS[$code];
+        }
+
+        if (!empty($field['enumValues'])) {
+            $values = array_map(fn($item) => $item['value'], $field['enumValues']);
+            $hint = implode(', ', $values);
+
+            if ($isMultiple) {
+                $hint .= "\n\nНесколько значений через запятую";
+            }
+
+            return $hint;
+        }
+
+        $hint = self::TYPE_HINTS[$type] ?? '';
+
+        if ($hint !== '' && $isMultiple) {
+            $hint .= ". Несколько значений через запятую";
+        }
+
+        return $hint;
     }
 
     /**

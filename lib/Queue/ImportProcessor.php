@@ -67,13 +67,16 @@ class ImportProcessor
         }
 
         try {
+            $dataSize = strlen($job['IMPORT_DATA'] ?? '');
+            $this->log("job={$jobId} Deserializing IMPORT_DATA, size={$dataSize} bytes");
+
             $allRows = unserialize($job['IMPORT_DATA']);
 
             if (!is_array($allRows)) {
                 throw new RuntimeException(
                     'Не удалось десериализовать данные импорта (IMPORT_DATA). '
                     . 'Вероятно, данные были обрезаны при записи в БД. '
-                    . 'Размер поля: ' . strlen($job['IMPORT_DATA'] ?? '') . ' байт'
+                    . 'Размер поля: ' . $dataSize . ' байт'
                 );
             }
 
@@ -89,14 +92,21 @@ class ImportProcessor
 
             $endIndex = min($startIndex + $batchSize, $totalRows);
 
+            $this->log("job={$jobId} Deserialized OK, entityType={$entityType}, totalRows={$totalRows}, batch={$startIndex}..{$endIndex}");
+
             $allRowsIndexed = array_values($allRows);
             $batchRows = [];
             for ($i = $startIndex; $i < $endIndex; $i++) {
                 $batchRows[$i] = $allRowsIndexed[$i];
             }
 
+            $batchCount = count($batchRows);
+            $this->log("job={$jobId} Calling importService->import(), batchSize={$batchCount}");
+
             $importService = EntityRegistry::createImportService($entityType);
             $result = $importService->import($batchRows, $options);
+
+            $this->log("job={$jobId} Import result: success={$result['success']}, errors=" . count($result['errors']));
 
             $existingErrors = !empty($job['ERRORS_DATA'])
                 ? unserialize($job['ERRORS_DATA'])
@@ -139,10 +149,16 @@ class ImportProcessor
                 $updateData['FINISHED_AT'] = new DateTime();
             }
 
+            $this->log("job={$jobId} Updating progress: processed={$newProcessed}/{$totalRows}, success={$newSuccess}, errors={$newErrorCount}, complete=" . ($isComplete ? 'yes' : 'no'));
+
             ImportJobTable::update($jobId, $updateData);
+
+            $this->log("job={$jobId} Batch done");
 
             return !$isComplete;
         } catch (\Throwable $e) {
+            $this->log("job={$jobId} EXCEPTION: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+
             $errorsData = [];
             try {
                 if (!empty($job['ERRORS_DATA'])) {
@@ -160,13 +176,26 @@ class ImportProcessor
                 ),
             ];
 
-            ImportJobTable::update($jobId, [
-                'STATUS' => ImportJobStatus::Error->value,
-                'FINISHED_AT' => new DateTime(),
-                'ERRORS_DATA' => serialize($errorsData),
-            ]);
+            try {
+                ImportJobTable::update($jobId, [
+                    'STATUS' => ImportJobStatus::Error->value,
+                    'FINISHED_AT' => new DateTime(),
+                    'ERRORS_DATA' => serialize($errorsData),
+                ]);
+                $this->log("job={$jobId} Error saved to DB, re-throwing");
+            } catch (\Throwable $updateEx) {
+                $this->log("job={$jobId} FAILED to save error to DB: " . $updateEx->getMessage());
+            }
 
             throw $e;
         }
+    }
+
+    /**
+     * Делегирует запись в лог агенту
+     */
+    private function log(string $message): void
+    {
+        ImportAgent::log($message);
     }
 }

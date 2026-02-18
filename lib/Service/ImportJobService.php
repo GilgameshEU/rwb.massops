@@ -38,6 +38,8 @@ class ImportJobService
             'ENTITY_TYPE' => $entityType,
             'STATUS' => ImportJobStatus::Pending->value,
             'TOTAL_ROWS' => count($rows),
+            'ERRORS_DATA' => serialize([]),
+            'CREATED_IDS' => serialize([]),
             'IMPORT_DATA' => serialize($rows),
             'IMPORT_OPTIONS' => serialize($options),
         ]);

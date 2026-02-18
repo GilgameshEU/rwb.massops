@@ -27,6 +27,26 @@ class RowNormalizer
     private const DATETIME_TYPES = ['datetime', 'DateTime'];
 
     /**
+     * Типы полей, для которых проверяется целочисленность
+     */
+    private const INTEGER_TYPES = ['integer', 'Integer'];
+
+    /**
+     * Типы полей, для которых проверяется числовой формат
+     */
+    private const DOUBLE_TYPES = ['double', 'Double'];
+
+    /**
+     * Типы полей, для которых проверяется формат Да/Нет
+     */
+    private const BOOLEAN_TYPES = ['boolean', 'Boolean'];
+
+    /**
+     * Допустимые значения для boolean-полей
+     */
+    private const BOOLEAN_ALLOWED = ['Y', 'N', '1', '0', 'y', 'n'];
+
+    /**
      * Нормализует строку данных
      *
      * @param array $row            Данные строки
@@ -85,23 +105,53 @@ class RowNormalizer
                 $dateError = $this->validateDateValue($value, $code, $fieldType);
                 if ($dateError !== null) {
                     $errors[] = $dateError;
-                    continue; // Не добавляем невалидное значение
+                    continue;
+                }
+            }
+
+            if ($fieldType !== null && !$this->isDateType($fieldType)) {
+                $typeError = $this->validateFieldType($value, $code, $fieldType);
+                if ($typeError !== null) {
+                    $errors[] = $typeError;
+                    continue;
                 }
             }
 
             if (str_starts_with($code, 'UF_')) {
                 if (in_array($code, $multipleFields, true)) {
-                    $uf[$code] = array_map(
-                        fn(string $v) => $this->resolveEnumValue(trim($v), $code, $enumMappings),
-                        explode(',', $value)
-                    );
+                    $resolvedValues = [];
+                    $hasEnumError = false;
+
+                    foreach (explode(',', $value) as $v) {
+                        $resolved = $this->resolveEnumValue(trim($v), $code, $enumMappings);
+                        if ($resolved instanceof ImportError) {
+                            $errors[] = $resolved;
+                            $hasEnumError = true;
+                            break;
+                        }
+                        $resolvedValues[] = $resolved;
+                    }
+
+                    if (!$hasEnumError) {
+                        $uf[$code] = $resolvedValues;
+                    }
                 } else {
-                    $uf[$code] = $this->resolveEnumValue($value, $code, $enumMappings);
+                    $resolved = $this->resolveEnumValue($value, $code, $enumMappings);
+                    if ($resolved instanceof ImportError) {
+                        $errors[] = $resolved;
+                    } else {
+                        $uf[$code] = $resolved;
+                    }
                 }
                 continue;
             }
 
-            $fields[$code] = $this->resolveEnumValue($value, $code, $enumMappings);
+            $resolved = $this->resolveEnumValue($value, $code, $enumMappings);
+            if ($resolved instanceof ImportError) {
+                $errors[] = $resolved;
+            } else {
+                $fields[$code] = $resolved;
+            }
         }
 
         return new NormalizeResult($fields, $uf, $fm, $errors);
@@ -117,18 +167,167 @@ class RowNormalizer
     }
 
     /**
-     * Резолвит текстовое значение enum-поля в ID/XML_ID
+     * Валидирует значение по типу поля
+     *
+     * @return ImportError|null Ошибка валидации или null если значение корректно
+     */
+    private function validateFieldType(string $value, string $fieldCode, string $fieldType): ?ImportError
+    {
+        if (in_array($fieldType, self::INTEGER_TYPES, true)) {
+            return $this->validateIntegerValue($value, $fieldCode);
+        }
+
+        if (in_array($fieldType, self::DOUBLE_TYPES, true)) {
+            return $this->validateDoubleValue($value, $fieldCode);
+        }
+
+        if (in_array($fieldType, self::BOOLEAN_TYPES, true)) {
+            return $this->validateBooleanValue($value, $fieldCode);
+        }
+
+        if ($fieldType === 'url') {
+            return $this->validateUrlValue($value, $fieldCode);
+        }
+
+        if ($fieldType === 'money') {
+            return $this->validateMoneyValue($value, $fieldCode);
+        }
+
+        return null;
+    }
+
+    /**
+     * Валидирует целочисленное значение
+     */
+    private function validateIntegerValue(string $value, string $fieldCode): ?ImportError
+    {
+        if (!preg_match('/^-?\d+$/', $value)) {
+            return new ImportError(
+                type: 'field',
+                code: 'INVALID_INTEGER',
+                message: "Значение «{$value}» не является целым числом",
+                field: $fieldCode
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * Валидирует числовое значение (с плавающей точкой)
+     */
+    private function validateDoubleValue(string $value, string $fieldCode): ?ImportError
+    {
+        $normalized = str_replace(',', '.', $value);
+
+        if (!is_numeric($normalized)) {
+            return new ImportError(
+                type: 'field',
+                code: 'INVALID_DOUBLE',
+                message: "Значение «{$value}» не является числом",
+                field: $fieldCode
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * Валидирует значение поля Да/Нет
+     */
+    private function validateBooleanValue(string $value, string $fieldCode): ?ImportError
+    {
+        if (!in_array($value, self::BOOLEAN_ALLOWED, true)) {
+            return new ImportError(
+                type: 'field',
+                code: 'INVALID_BOOLEAN',
+                message: "Значение «{$value}» недопустимо для поля Да/Нет. Ожидается: Y, N, 1 или 0",
+                field: $fieldCode
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * Валидирует URL
+     */
+    private function validateUrlValue(string $value, string $fieldCode): ?ImportError
+    {
+        if (filter_var($value, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        if (preg_match('#^https?://.+#i', $value)) {
+            return null;
+        }
+
+        return new ImportError(
+            type: 'field',
+            code: 'INVALID_URL',
+            message: "Значение «{$value}» не является корректным URL-адресом",
+            field: $fieldCode
+        );
+    }
+
+    /**
+     * Валидирует денежное значение
+     *
+     * Формат Bitrix: "1500.00" или "1500.00|RUB"
+     */
+    private function validateMoneyValue(string $value, string $fieldCode): ?ImportError
+    {
+        $parts = explode('|', $value, 2);
+        $amount = str_replace(',', '.', trim($parts[0]));
+
+        if (!is_numeric($amount)) {
+            return new ImportError(
+                type: 'field',
+                code: 'INVALID_MONEY',
+                message: "Значение «{$value}» не является корректной суммой",
+                field: $fieldCode
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * Резолвит текстовое значение enum-поля в ID
      *
      * Если для поля есть маппинг и текст найден — возвращает ID.
-     * Иначе возвращает исходное значение без изменений.
+     * Если маппинг есть, но значение не найдено — возвращает ошибку.
+     * Если маппинга нет — возвращает исходное значение.
+     *
+     * @return string|ImportError
      */
-    private function resolveEnumValue(string $value, string $code, array $enumMappings): string
+    private function resolveEnumValue(string $value, string $code, array $enumMappings): string|ImportError
     {
+        if (!isset($enumMappings[$code])) {
+            return $value;
+        }
+
         if (isset($enumMappings[$code][$value])) {
             return (string) $enumMappings[$code][$value];
         }
 
-        return $value;
+        $validIds = array_values($enumMappings[$code]);
+        if (in_array($value, $validIds, true)) {
+            return $value;
+        }
+
+        $allowedValues = array_keys($enumMappings[$code]);
+        $preview = implode(', ', array_slice($allowedValues, 0, 5));
+        if (count($allowedValues) > 5) {
+            $preview .= '...';
+        }
+
+        return new ImportError(
+            type: 'field',
+            code: 'INVALID_ENUM',
+            message: "Значение «{$value}» не найдено в списке допустимых. Допустимые: {$preview}",
+            field: $code
+        );
     }
 
     /**
