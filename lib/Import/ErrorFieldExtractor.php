@@ -35,16 +35,13 @@ final class ErrorFieldExtractor
      */
     public function extractFieldCode(Error $error): ?string
     {
-        // 1. Поиск по Error::getCode()
         $code = (string) $error->getCode();
 
         if ($code !== '' && $code !== '0') {
-            // Прямое совпадение
             if (in_array($code, $this->fieldCodes, true)) {
                 return $code;
             }
 
-            // Суффикс (BX_CRM_REQUIRED_FIELD_TITLE → TITLE)
             foreach ($this->fieldCodes as $fieldCode) {
                 if (str_ends_with($code, '_' . $fieldCode)) {
                     return $fieldCode;
@@ -52,14 +49,11 @@ final class ErrorFieldExtractor
             }
         }
 
-        // 2. Парсинг названия поля из текста сообщения
-        //    Формат Bitrix: Поле "Название" обязательно для заполнения
         $message = $error->getMessage();
 
         if (preg_match('/[«""\'](.+?)[»""\']/', $message, $matches)) {
             $fieldTitle = $matches[1];
 
-            // название → код (Название → TITLE)
             $flipped = array_flip($this->fieldList);
             if (isset($flipped[$fieldTitle])) {
                 return $flipped[$fieldTitle];

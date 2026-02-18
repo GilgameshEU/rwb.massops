@@ -29,7 +29,6 @@
          * @param {string} tabId Идентификатор таба
          */
         switchTo: function (tabId) {
-            // Деактивируем все табы
             document.querySelectorAll('.rwb-massops__tab').forEach(function (t) {
                 t.classList.remove('rwb-massops__tab--active');
             });
@@ -38,7 +37,6 @@
                 c.classList.remove('rwb-massops__tab-content--active');
             });
 
-            // Активируем нужный
             var tab = document.querySelector('.rwb-massops__tab[data-tab="' + tabId + '"]');
             var content = document.getElementById('rwb-tab-' + tabId);
 

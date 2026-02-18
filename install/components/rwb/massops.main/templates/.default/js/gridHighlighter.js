@@ -25,7 +25,6 @@
 
             var self = this;
 
-            // Подсвечиваем строки с ошибками (красные или синие для дублей)
             Object.keys(errorsByRow).forEach(function (rowIdx) {
                 var rowEl = self.getRowElement(rowIdx);
                 if (!rowEl) {
@@ -33,7 +32,6 @@
                 }
 
                 var rowErrors = errorsByRow[rowIdx];
-                // Приводим к массиву (PHP может вернуть объект вместо массива)
                 if (!Array.isArray(rowErrors)) {
                     rowErrors = typeof rowErrors === 'object' && rowErrors !== null
                         ? Object.values(rowErrors)
@@ -44,18 +42,15 @@
                     return e.message || String(e);
                 });
 
-                // Проверяем, есть ли ошибки дублей
                 var hasDuplicateError = rowErrors.some(function (e) {
                     return e.type === 'duplicate';
                 });
 
-                // Синий для дублей, красный для остальных ошибок
                 var cssClass = hasDuplicateError ? self.CSS_DUPLICATE_ROW : self.CSS_ERROR_ROW;
                 rowEl.classList.add(cssClass);
                 rowEl.setAttribute('title', messages.join('\n'));
             });
 
-            // Зелёные успешные строки (не ошибки и не дубли)
             Object.keys(successRows).forEach(function (rowIdx) {
                 var rowEl = self.getRowElement(rowIdx);
                 if (rowEl &&

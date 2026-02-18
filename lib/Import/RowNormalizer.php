@@ -52,7 +52,6 @@ class RowNormalizer
         $multiFields = $this->config->getMultiFields();
 
         foreach ($fieldCodes as $index => $code) {
-            // Пропускаем колонки без маппинга (пустой код)
             if ($code === '' || $code === null) {
                 continue;
             }
@@ -63,7 +62,6 @@ class RowNormalizer
                 continue;
             }
 
-            // мультиполя (PHONE / EMAIL)
             if (isset($multiFields[$code])) {
                 $multiResult = $this->normalizeMultiField(
                     $value,
@@ -81,7 +79,6 @@ class RowNormalizer
                 continue;
             }
 
-            // Валидация даты/времени по типу поля
             $fieldType = $fieldTypes[$code] ?? null;
 
             if ($fieldType !== null && $this->isDateType($fieldType)) {
@@ -92,10 +89,8 @@ class RowNormalizer
                 }
             }
 
-            // пользовательские поля
             if (str_starts_with($code, 'UF_')) {
                 if (in_array($code, $multipleFields, true)) {
-                    // Множественные поля — разбиваем по запятой, резолвим enum
                     $uf[$code] = array_map(
                         fn(string $v) => $this->resolveEnumValue(trim($v), $code, $enumMappings),
                         explode(',', $value)
@@ -106,7 +101,6 @@ class RowNormalizer
                 continue;
             }
 
-            // обычные поля (включая CRM-справочники: INDUSTRY, COMPANY_TYPE и т.п.)
             $fields[$code] = $this->resolveEnumValue($value, $code, $enumMappings);
         }
 
@@ -145,7 +139,6 @@ class RowNormalizer
     private function validateDateValue(string $value, string $fieldCode, string $fieldType): ?ImportError
     {
         if (in_array($fieldType, self::DATETIME_TYPES, true)) {
-            // Формат: ДД.ММ.ГГГГ ЧЧ:ММ:СС
             $parsed = \DateTime::createFromFormat('d.m.Y H:i:s', $value);
             if ($parsed === false || $parsed->format('d.m.Y H:i:s') !== $value) {
                 return new ImportError(
@@ -158,7 +151,6 @@ class RowNormalizer
             return null;
         }
 
-        // Формат: ДД.ММ.ГГГГ
         $parsed = \DateTime::createFromFormat('d.m.Y', $value);
         if ($parsed === false || $parsed->format('d.m.Y') !== $value) {
             return new ImportError(
@@ -188,7 +180,6 @@ class RowNormalizer
         string $type,
         string $fieldCode,
     ): array {
-        // Защита от пустого разделителя
         if ($delimiter === '') {
             $delimiter = ',';
         }
@@ -206,7 +197,6 @@ class RowNormalizer
                 continue;
             }
 
-            // Нормализация телефонов в E.164
             if ($type === 'phone') {
                 $normalized = $this->normalizePhone($item);
 
@@ -259,13 +249,10 @@ class RowNormalizer
         $parser = Parser::getInstance();
         $phoneNumber = $parser->parse($prepared, $defaultCountry);
 
-        // Если Bitrix-парсер распознал — используем E.164
         if ($phoneNumber->isValid()) {
             return $phoneNumber->format(Format::E164);
         }
 
-        // Фолбэк: принимаем номер если базовый формат корректный
-        // (от 10 до 15 цифр с ведущим +, стандарт E.164)
         $digits = preg_replace('/\D/', '', $prepared);
         $withPlus = str_starts_with($prepared, '+') ? '+' . $digits : $prepared;
 
@@ -285,20 +272,16 @@ class RowNormalizer
      */
     private function preparePhone(string $phone): string
     {
-        // Убираем всё кроме цифр и +
         $cleaned = preg_replace('/[^\d+]/', '', $phone);
 
-        // Если уже начинается с + — вернуть как есть
         if (str_starts_with($cleaned, '+')) {
             return $cleaned;
         }
 
-        // 11-значные российские номера: 7... или 8...
         if (strlen($cleaned) === 11 && ($cleaned[0] === '7' || $cleaned[0] === '8')) {
             return '+7' . substr($cleaned, 1);
         }
 
-        // 10-значный номер без кода страны — предполагаем Россию
         if (strlen($cleaned) === 10) {
             return '+7' . $cleaned;
         }

@@ -25,7 +25,6 @@ class GridDataConverter
             $headerRow = array_shift($rows);
         }
 
-        // Первая колонка — номер строки
         $columns = [
             [
                 'id' => 'ROW_NUM',
@@ -86,14 +85,12 @@ class GridDataConverter
             $valueA = $a['data'][$sortBy] ?? '';
             $valueB = $b['data'][$sortBy] ?? '';
 
-            // Пробуем числовое сравнение
             $numA = is_numeric($valueA) ? (float) $valueA : null;
             $numB = is_numeric($valueB) ? (float) $valueB : null;
 
             if ($numA !== null && $numB !== null) {
                 $result = $numA <=> $numB;
             } else {
-                // Строковое сравнение с учётом локали
                 $result = strcasecmp($valueA, $valueB);
             }
 

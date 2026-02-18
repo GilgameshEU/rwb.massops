@@ -28,7 +28,6 @@ class ImportAgent
         try {
             Loader::requireModule('rwb.massops');
 
-            // Найти самую старую активную задачу
             $job = ImportJobTable::getList([
                 'filter' => [
                     'STATUS' => [
@@ -52,8 +51,6 @@ class ImportAgent
 
             self::log('OK processBatch job=' . $job['ID']);
         } catch (\Throwable $e) {
-            // Каждый вызов обёрнут отдельно, чтобы сбой в одном
-            // не помешал выполнению другого и не убил агент
             try {
                 self::log(
                     'ERROR processBatch job=' . ($job['ID'] ?? '?')
@@ -61,7 +58,6 @@ class ImportAgent
                     . "\n" . $e->getTraceAsString()
                 );
             } catch (\Throwable) {
-                // log() не должен бросать, но на всякий случай
             }
 
             try {
@@ -69,7 +65,6 @@ class ImportAgent
                     ->getExceptionHandler()
                     ->writeToLog($e);
             } catch (\Throwable) {
-                // Bitrix exception handler тоже может упасть
             }
         }
 
@@ -95,7 +90,6 @@ class ImportAgent
     {
         $logLine = '[' . date('Y-m-d H:i:s') . '] ' . $message . "\n";
 
-        // Пробуем несколько вариантов document root
         $roots = array_filter([
             self::getDocumentRootSafe(),
             $_SERVER['DOCUMENT_ROOT'] ?? null,
@@ -108,7 +102,6 @@ class ImportAgent
             }
         }
 
-        // Последний fallback — системный temp
         $fallbackDir = sys_get_temp_dir() . '/rwb_massops_logs';
         self::writeToFile($fallbackDir, $logLine);
     }

@@ -47,9 +47,6 @@
             }
         },
 
-        // ----------------------------------------------------------------
-        //  Проверка (dry run)
-        // ----------------------------------------------------------------
 
         _handleCheck: function () {
             var self = this;
@@ -83,7 +80,6 @@
                     window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
                 }
 
-                // Обновляем toolbar по результатам проверки
                 self._showPostCheckState(wouldBeAdded);
             }).catch(function (error) {
                 self.setLoading(self.checkBtn, false, originalText);
@@ -91,9 +87,6 @@
             });
         },
 
-        // ----------------------------------------------------------------
-        //  Импорт
-        // ----------------------------------------------------------------
 
         _handleImport: function () {
             var self = this;
@@ -118,7 +111,6 @@
                     var allErrors = self._collectErrors(result.errors);
                     var gridErrors = result.errors || {};
 
-                    // Системная ошибка (исключение в processBatch)
                     if (result.status === 'error' && result.errorMessage) {
                         allErrors.push({
                             type: 'system',
@@ -140,7 +132,6 @@
                         window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
                     }
 
-                    // После импорта — возврат к начальному состоянию
                     self._resetToolbar();
                     self.lastReadyCount = null;
                 });
@@ -151,9 +142,6 @@
             });
         },
 
-        // ----------------------------------------------------------------
-        //  Управление toolbar
-        // ----------------------------------------------------------------
 
         /**
          * Показывает состояние после проверки
@@ -163,11 +151,9 @@
             var nothingMsg = BX('rwb-import-nothing');
             var cabinetsWrap = BX('rwb-create-cabinets-wrap');
 
-            // Скрываем кнопку «Проверить»
             this.checkBtn.style.display = 'none';
 
             if (readyCount > 0) {
-                // Показываем блок с кнопкой импорта
                 if (actionsWrap) {
                     actionsWrap.style.display = '';
                 }
@@ -175,19 +161,16 @@
                     nothingMsg.style.display = 'none';
                 }
 
-                // Toggle кабинетов — только для компаний
                 if (cabinetsWrap) {
                     var entityType = this.getEntityType();
                     cabinetsWrap.style.display = (entityType === 'company') ? '' : 'none';
                 }
 
-                // Текст кнопки импорта
                 if (this.importBtn) {
                     this.importBtn.textContent = 'Импортировать компании (' + readyCount + ' шт.)';
                     this.importBtn.disabled = false;
                 }
             } else {
-                // Нет компаний для добавления
                 if (actionsWrap) {
                     actionsWrap.style.display = 'none';
                 }
@@ -214,9 +197,6 @@
             }
         },
 
-        // ----------------------------------------------------------------
-        //  Helpers
-        // ----------------------------------------------------------------
 
         _getCreateCabinets: function () {
             var toggle = BX('rwb-create-cabinets');

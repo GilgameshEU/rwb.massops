@@ -10,8 +10,6 @@ use Exception;
 use InvalidArgumentException;
 use RuntimeException;
 use Bitrix\Crm\Field;
-use Rwb\Massops\Import\Parser\CsvParser;
-use Rwb\Massops\Import\Parser\XlsxParser;
 use Rwb\Massops\Repository\CrmRepository;
 use Rwb\Massops\Service\UserResolver;
 use Rwb\Massops\Support\UserFieldHelper;
@@ -87,7 +85,6 @@ class ImportService
      */
     protected function processRows(array $rows, ImportMode $mode, array $options = []): array
     {
-        // Получаем коды полей из заголовков файла (если переданы колонки)
         $fieldCodes = $this->resolveFieldCodes($options['columns'] ?? []);
         $fieldTypes = $this->repository->getFieldTypeMap();
         $multipleFields = $this->repository->getMultipleFieldCodes();
@@ -116,15 +113,12 @@ class ImportService
             $uf = $normalized->uf;
             $fm = $normalized->fm;
 
-            // Резолюция полей типа "Пользователь" (ASSIGNED_BY_ID и др.)
             $userErrors = $this->resolveUserFields($fields, $fieldTypes);
 
-            // Применяем опции импорта
             $this->applyImportOptions($uf, $options);
 
             $hasErrors = false;
 
-            // 0. Ошибки резолюции пользователей
             if (!empty($userErrors)) {
                 foreach ($userErrors as $error) {
                     $errors[$rowIndex][] = $this->attachRowToError(
@@ -135,7 +129,6 @@ class ImportService
                 $hasErrors = true;
             }
 
-            // 1. Ошибки нормализации (невалидные телефоны и т.д.)
             if (!empty($normalized->errors)) {
                 foreach ($normalized->errors as $error) {
                     $errors[$rowIndex][] = $this->attachRowToError(
@@ -146,7 +139,6 @@ class ImportService
                 $hasErrors = true;
             }
 
-            // 2. Бизнес-валидация
             $validation = $this->validateRow($fields, $uf, $fm);
 
             if (!$validation->isValid()) {
@@ -159,7 +151,6 @@ class ImportService
                 $hasErrors = true;
             }
 
-            // 3. CRM-валидация / сохранение
             $result = $this->repository->add(
                 $fields,
                 $uf,
@@ -239,7 +230,6 @@ class ImportService
      */
     protected function applyImportOptions(array &$uf, array $options): void
     {
-        // Опция createCabinets: добавить need_suppliers в поле COMMENTS компании (множественное поле)
         if (!empty($options['createCabinets'])) {
             $fieldCode = UserFieldHelper::getCompanyCommentsField();
             if ($fieldCode) {
@@ -304,11 +294,9 @@ class ImportService
     protected function resolveFieldCodes(array $columns): array
     {
         if (empty($columns)) {
-            // Legacy: используем все коды в порядке из репозитория
             return array_keys($this->repository->getFieldList());
         }
 
-        // Строим обратный маппинг: название → код
         $fieldList = $this->repository->getFieldList();
         $titleToCode = array_flip($fieldList);
 
@@ -316,7 +304,6 @@ class ImportService
         foreach ($columns as $column) {
             $columnId = $column['id'] ?? '';
 
-            // Пропускаем служебную колонку с номером строки
             if ($columnId === 'ROW_NUM') {
                 $fieldCodes[] = '';
                 continue;
@@ -325,7 +312,6 @@ class ImportService
             $title = $column['name'] ?? '';
             $code = $titleToCode[$title] ?? null;
 
-            // Если поле не найдено — пропускаем (будет обработано как пустое)
             $fieldCodes[] = $code ?? '';
         }
 

@@ -7,12 +7,10 @@ BX.ready(function () {
     var config = (BX.RwbMassops && BX.RwbMassops.config) || {};
     var selectedEntityType = config.currentEntityType || null;
 
-    // --- Геттер текущей сущности ---
     function getEntityType() {
         return selectedEntityType;
     }
 
-    // --- Элементы ---
     var nextBtn1 = BX('rwb-wizard-next-1');
     var backBtn2 = BX('rwb-wizard-back-2');
     var uploadBtn = BX('rwb-wizard-upload');
@@ -22,10 +20,8 @@ BX.ready(function () {
     var importBtn = BX('rwb-import-start');
     var templateLink = BX('rwb-import-template');
 
-    // --- 1. Табы ---
     window.RwbTabManager.init();
 
-    // --- 2. Wizard ---
     var initialStep = 1;
     if (config.hasData && config.currentEntityType) {
         initialStep = 3;
@@ -33,7 +29,6 @@ BX.ready(function () {
     }
     window.RwbWizardManager.init(initialStep);
 
-    // --- 3. Entity Selector ---
     window.RwbEntitySelector.init(function (entityType) {
         selectedEntityType = entityType;
         if (nextBtn1) {
@@ -41,21 +36,17 @@ BX.ready(function () {
         }
     }, config.currentEntityType);
 
-    // Если есть предвыбранная сущность — активировать кнопку
     if (config.currentEntityType && nextBtn1) {
         nextBtn1.disabled = false;
     }
 
-    // --- 4. Dropzone ---
     window.RwbDropzoneHandler.init(function (file) {
         if (uploadBtn) {
             uploadBtn.disabled = !file;
         }
     });
 
-    // --- 5. Кнопки wizard ---
 
-    // Шаг 1 → 2
     if (nextBtn1) {
         nextBtn1.addEventListener('click', function () {
             if (selectedEntityType) {
@@ -64,43 +55,36 @@ BX.ready(function () {
         });
     }
 
-    // Шаг 2 → 1
     if (backBtn2) {
         backBtn2.addEventListener('click', function () {
             window.RwbWizardManager.back();
         });
     }
 
-    // Шаг 3 → 2
     if (backBtn3) {
         backBtn3.addEventListener('click', function () {
             window.RwbWizardManager.back();
         });
     }
 
-    // --- 6. Upload ---
     if (uploadBtn) {
         window.RwbImportUploadHandler.init(
             uploadBtn,
             getEntityType,
             function () {
-                // Перезагружаем страницу, чтобы грид обновился с данными из сессии
                 location.reload();
             }
         );
     }
 
-    // --- 7. Template download ---
     if (templateLink) {
         window.RwbImportTemplateHandler.init(templateLink, getEntityType);
     }
 
-    // --- 8. Import (проверка + импорт) ---
     if (checkBtn) {
         window.RwbImportImportHandler.init(checkBtn, importBtn, getEntityType);
     }
 
-    // --- 9. Clear ---
     if (clearBtn) {
         clearBtn.addEventListener('click', function () {
             BX.ajax.runComponentAction('rwb:massops.main', 'clear', {
@@ -111,7 +95,6 @@ BX.ready(function () {
         });
     }
 
-    // --- 10. Stats tab (lazy-load при переключении) ---
     window.RwbStatsHandler.init();
 
     var origSwitchTo = window.RwbTabManager.switchTo.bind(window.RwbTabManager);

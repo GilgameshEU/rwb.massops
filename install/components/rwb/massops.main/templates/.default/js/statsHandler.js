@@ -70,7 +70,6 @@
             items.forEach(function (item) {
                 var tr = document.createElement('tr');
 
-                // Простые ячейки (текст / HTML)
                 var simpleCells = [
                     { text: item.userName },
                     { text: item.entityTitle },
@@ -90,7 +89,6 @@
                     tr.appendChild(td);
                 });
 
-                // Даты
                 var dateCells = [
                     self._formatDate(item.createdAt),
                     self._formatDate(item.startedAt),
@@ -103,7 +101,6 @@
                     tr.appendChild(td);
                 });
 
-                // Кнопка скачивания отчёта
                 var reportTd = document.createElement('td');
                 reportTd.innerHTML = self._renderDownloadButton(item);
                 tr.appendChild(reportTd);
@@ -119,7 +116,6 @@
          * @returns {string}
          */
         _renderDownloadButton: function (item) {
-            // Показываем кнопку только для завершённых задач
             if (item.status !== 'completed' && item.status !== 'error') {
                 return '\u2014';
             }
@@ -230,7 +226,6 @@
             }
         },
 
-        // --- Хелперы видимости ---
 
         _showLoading: function (show) {
             var el = BX('rwb-stats-loading');

@@ -37,7 +37,6 @@ class ErrorReportExporter
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Результаты проверки');
 
-        // Заголовки: оригинальные колонки + "Ошибки"
         $col = 1;
         foreach ($columns as $column) {
             $cellAddr = Coordinate::stringFromColumnIndex($col) . '1';
@@ -45,20 +44,16 @@ class ErrorReportExporter
             $col++;
         }
 
-        // Колонка "Ошибки"
         $errorColLetter = Coordinate::stringFromColumnIndex($col);
         $sheet->setCellValue($errorColLetter . '1', 'Ошибки');
 
-        // Стиль заголовков
         $headerRange = 'A1:' . $errorColLetter . '1';
         self::applyHeaderStyle($sheet, $headerRange);
 
-        // Данные
         $rowNum = 2;
         foreach ($rows as $rowIndex => $row) {
             $col = 1;
 
-            // Данные из грида
             foreach ($columns as $column) {
                 $cellAddr = Coordinate::stringFromColumnIndex($col) . $rowNum;
                 $value = $row['data'][$column['id']] ?? '';
@@ -66,14 +61,12 @@ class ErrorReportExporter
                 $col++;
             }
 
-            // Колонка с ошибками
             $errorMessages = [];
             $hasDuplicateError = false;
 
             if (isset($errors[$rowIndex]) && !empty($errors[$rowIndex])) {
                 foreach ($errors[$rowIndex] as $error) {
                     $errorMessages[] = self::formatErrorMessage($error);
-                    // Проверяем, есть ли ошибки дублей
                     if (isset($error['type']) && $error['type'] === 'duplicate') {
                         $hasDuplicateError = true;
                     }
@@ -83,24 +76,20 @@ class ErrorReportExporter
             $errorCellAddr = $errorColLetter . $rowNum;
             $sheet->setCellValue($errorCellAddr, implode('; ', $errorMessages));
 
-            // Подсветка строки
             $rowRange = 'A' . $rowNum . ':' . $errorColLetter . $rowNum;
             if (!empty($errorMessages)) {
-                // Строка с ошибками
                 if ($hasDuplicateError) {
                     self::applyDuplicateRowStyle($sheet, $rowRange);
                 } else {
                     self::applyErrorRowStyle($sheet, $rowRange);
                 }
             } else {
-                // Успешная строка — зелёный
                 self::applySuccessRowStyle($sheet, $rowRange);
             }
 
             $rowNum++;
         }
 
-        // Авторазмер колонок
         foreach (range(1, $col) as $colIndex) {
             $colLetter = Coordinate::stringFromColumnIndex($colIndex);
             $sheet->getColumnDimension($colLetter)->setAutoSize(true);
@@ -121,7 +110,6 @@ class ErrorReportExporter
         $code = $error['code'] ?? '';
         $context = $error['context'] ?? [];
 
-        // Дубликат ИНН в файле — более понятный формат
         if ($code === 'DUPLICATE_IN_FILE') {
             $inn = $context['inn'] ?? '';
             $duplicateRows = $context['duplicateRows'] ?? [];
@@ -133,7 +121,6 @@ class ErrorReportExporter
             }
         }
 
-        // Дубликат ИНН в CRM — оставляем понятный формат
         if ($code === 'DUPLICATE_IN_CRM') {
             $companyId = $context['existingCompanyId'] ?? '';
             $inn = $context['inn'] ?? '';
@@ -144,7 +131,6 @@ class ErrorReportExporter
             }
         }
 
-        // Для остальных ошибок — стандартное сообщение
         return $error['message'] ?? (string)$error;
     }
 

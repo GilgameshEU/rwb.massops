@@ -8,16 +8,13 @@ use Bitrix\Main\AccessDeniedException;
 use Bitrix\Main\ArgumentException;
 use Bitrix\Main\Engine\Contract\Controllerable;
 use Bitrix\Main\Engine\CurrentUser;
-use Bitrix\Main\Entity\ExpressionField;
 use Bitrix\Main\Loader;
 use Bitrix\Main\LoaderException;
 use Bitrix\Main\UI\PageNavigation;
-use Bitrix\Main\UserTable;
 use Rwb\Massops\EntityRegistry;
 use Rwb\Massops\Import\FieldValidator;
 use Rwb\Massops\Import\FileParser;
-use Rwb\Massops\Queue\ImportJobStatus;
-use Rwb\Massops\Queue\ImportJobTable;
+use Rwb\Massops\Service\ImportJobService;
 use Rwb\Massops\Support\ErrorReportExporter;
 use Rwb\Massops\Support\GridDataConverter;
 use Rwb\Massops\Support\SessionStorage;
@@ -26,16 +23,18 @@ use Rwb\Massops\Support\XlsxTemplateExporter;
 
 /**
  * Основной компонент массовых операций CRM
+ *
+ * Тонкий контроллер: проверяет права, читает параметры запроса,
+ * делегирует бизнес-логику сервисам и форматирует ответ.
  */
 class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 {
+    private const GRID_ID = 'RWB_MASSOPS_GRID';
+    private const GRID_DEFAULT_PAGE_SIZE = 50;
+    private const GRID_ALLOWED_PAGE_SIZES = [20, 50, 100, 200, 500];
+
     /**
      * Подготавливает параметры компонента
-     *
-     * @param array $arParams
-     *
-     * @return array
-     * @throws LoaderException
      */
     public function onPrepareComponentParams($arParams): array
     {
@@ -48,8 +47,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
     /**
      * Конфигурация AJAX-действий компонента
-     *
-     * @return array
      */
     public function configureActions(): array
     {
@@ -67,9 +64,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         ];
     }
 
-    private const GRID_ID = 'RWB_MASSOPS_GRID';
-    private const GRID_DEFAULT_PAGE_SIZE = 50;
-    private const GRID_ALLOWED_PAGE_SIZES = [20, 50, 100, 200, 500];
 
     /**
      * Основной метод выполнения компонента
@@ -87,7 +81,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $this->arResult['HAS_DATA'] = SessionStorage::hasData();
         $this->arResult['GRID_COLUMNS'] = SessionStorage::getColumns();
 
-        // Получаем строки и применяем сортировку
         $allRows = SessionStorage::getRows();
         $sort = $this->getGridSort();
 
@@ -95,7 +88,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             $allRows = GridDataConverter::sortRows($allRows, $sort['by'], $sort['order']);
         }
 
-        // Пагинация с учётом выбора пользователя
         $pageSize = $this->getGridPageSize();
         $totalRows = count($allRows);
 
@@ -116,78 +108,13 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $this->includeComponentTemplate();
     }
 
-    /**
-     * Получает параметры сортировки грида
-     *
-     * @return array{by: string, order: string}
-     */
-    private function getGridSort(): array
-    {
-        $gridOptions = new \Bitrix\Main\Grid\Options(self::GRID_ID);
-        $sorting = $gridOptions->GetSorting([
-            'sort' => ['COL_0' => 'ASC'],
-            'vars' => ['by' => 'by', 'order' => 'order'],
-        ]);
-
-        $sort = $sorting['sort'] ?? [];
-        $by = key($sort) ?: '';
-        $order = current($sort) ?: 'ASC';
-
-        return ['by' => $by, 'order' => $order];
-    }
-
-    /**
-     * Получает размер страницы грида из настроек пользователя
-     *
-     * @return int
-     */
-    private function getGridPageSize(): int
-    {
-        $gridOptions = new \Bitrix\Main\Grid\Options(self::GRID_ID);
-        $navParams = $gridOptions->GetNavParams([
-            'nPageSize' => self::GRID_DEFAULT_PAGE_SIZE,
-        ]);
-
-        $pageSize = (int) ($navParams['nPageSize'] ?? self::GRID_DEFAULT_PAGE_SIZE);
-
-        // Проверяем допустимость значения
-        if (!in_array($pageSize, self::GRID_ALLOWED_PAGE_SIZES, true)) {
-            $pageSize = self::GRID_DEFAULT_PAGE_SIZE;
-        }
-
-        return $pageSize;
-    }
-
-    /**
-     * Определяет тип сущности из запроса или сессии
-     *
-     * @return string
-     */
-    private function resolveEntityType(): string
-    {
-        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
-        $entityType = $request->getPost('entityType')
-            ?? $request->get('entityType')
-            ?? SessionStorage::getEntityType();
-
-        if (!$entityType || !EntityRegistry::has($entityType)) {
-            throw new RuntimeException('Тип сущности не указан');
-        }
-
-        return $entityType;
-    }
 
     /**
      * Загружает и парсит файл импорта
-     *
-     * @return array
-     * @throws AccessDeniedException
      */
     public function uploadFileAction(): array
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
+        $this->checkAdmin();
 
         $entityType = $this->resolveEntityType();
         $repository = EntityRegistry::createRepository($entityType);
@@ -246,49 +173,18 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         ];
     }
 
-    /**
-     * Возвращает маппинг кодов полей CRM на ID колонок грида
-     *
-     * @param string $entityType
-     *
-     * @return array<string, string>
-     */
-    private function getFieldToColumnMapping(string $entityType): array
-    {
-        $repository = EntityRegistry::createRepository($entityType);
-        $fieldCodes = array_keys($repository->getFieldList());
-        $mapping = [];
-
-        foreach ($fieldCodes as $index => $code) {
-            $mapping[$code] = 'COL_' . $index;
-        }
-
-        return $mapping;
-    }
 
     /**
      * Выполняет импорт из сохранённых данных
-     *
-     * @return array
-     * @throws AccessDeniedException
      */
     public function runImportAction(): array
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
-
-        if (!SessionStorage::hasData()) {
-            throw new RuntimeException('Нет данных для импорта');
-        }
+        $this->checkAdmin();
+        $this->checkData();
 
         $entityType = $this->resolveEntityType();
         $importService = EntityRegistry::createImportService($entityType);
-
-        // Передаём колонки для корректного маппинга полей
-        $options = [
-            'columns' => SessionStorage::getColumns(),
-        ];
+        $options = $this->buildImportOptions($entityType);
 
         try {
             $result = $importService->import(
@@ -303,14 +199,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             ];
         }
 
-        $gridErrors = [];
-        foreach ($result['errors'] as $rowIndex => $rowErrors) {
-            $gridErrors[$rowIndex] = array_map(
-                fn($error) => $error->toArray(),
-                $rowErrors
-            );
-        }
-
         $addedDetails = [];
         if (isset($result['added'])) {
             foreach ($result['added'] as $rowIndex => $item) {
@@ -321,7 +209,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         return [
             'success' => true,
             'added' => $result['success'],
-            'errors' => $gridErrors,
+            'errors' => $this->formatGridErrors($result['errors']),
             'addedDetails' => $addedDetails,
             'fieldToColumn' => $this->getFieldToColumnMapping($entityType),
         ];
@@ -329,33 +217,15 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
     /**
      * Выполняет dry run импорта (симуляция без сохранения)
-     *
-     * @return array
-     * @throws AccessDeniedException
      */
     public function runDryRunAction(): array
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
-
-        if (!SessionStorage::hasData()) {
-            throw new RuntimeException('Нет данных для импорта');
-        }
+        $this->checkAdmin();
+        $this->checkData();
 
         $entityType = $this->resolveEntityType();
-        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
-        $createCabinets = $request->getPost('createCabinets') === 'Y';
-
         $importService = EntityRegistry::createImportService($entityType);
-
-        // Передаём опции, включая колонки для корректного маппинга полей
-        $options = [
-            'columns' => SessionStorage::getColumns(),
-        ];
-        if ($entityType === 'company' && $createCabinets) {
-            $options['createCabinets'] = true;
-        }
+        $options = $this->buildImportOptions($entityType);
 
         try {
             $result = $importService->dryRun(
@@ -370,14 +240,6 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             ];
         }
 
-        $gridErrors = [];
-        foreach ($result['errors'] as $rowIndex => $rowErrors) {
-            $gridErrors[$rowIndex] = array_map(
-                fn($error) => $error->toArray(),
-                $rowErrors
-            );
-        }
-
         $wouldBeAdded = [];
         foreach ($result['wouldBeAdded'] as $rowIndex => $item) {
             $wouldBeAdded[$rowIndex] = $item;
@@ -386,272 +248,67 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         return [
             'success' => true,
             'wouldBeAdded' => $result['success'],
-            'errors' => $gridErrors,
+            'errors' => $this->formatGridErrors($result['errors']),
             'wouldBeAddedDetails' => $wouldBeAdded,
             'fieldToColumn' => $this->getFieldToColumnMapping($entityType),
         ];
     }
 
+
     /**
      * Ставит импорт в очередь на фоновую обработку
-     *
-     * @return array{jobId: int}
-     * @throws AccessDeniedException
      */
     public function startImportAction(): array
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
-
-        if (!SessionStorage::hasData()) {
-            throw new RuntimeException('Нет данных для импорта');
-        }
+        $this->checkAdmin();
+        $this->checkData();
 
         $entityType = $this->resolveEntityType();
-        $rows = SessionStorage::getRows();
-        $columns = SessionStorage::getColumns();
+        $options = $this->buildImportOptions($entityType);
 
-        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
-        $createCabinets = $request->getPost('createCabinets') === 'Y';
+        $service = new ImportJobService();
+        $jobId = $service->createJob(
+            (int) CurrentUser::get()->getId(),
+            $entityType,
+            SessionStorage::getRows(),
+            $options
+        );
 
-        // Формируем опции импорта, включая колонки для маппинга полей
-        $options = [
-            'columns' => $columns,
-        ];
-        if ($entityType === 'company' && $createCabinets) {
-            $options['createCabinets'] = true;
-        }
-
-        $result = ImportJobTable::add([
-            'USER_ID' => (int) CurrentUser::get()->getId(),
-            'ENTITY_TYPE' => $entityType,
-            'STATUS' => ImportJobStatus::Pending->value,
-            'TOTAL_ROWS' => count($rows),
-            'IMPORT_DATA' => serialize($rows),
-            'IMPORT_OPTIONS' => serialize($options),
-        ]);
-
-        if (!$result->isSuccess()) {
-            throw new RuntimeException('Не удалось создать задачу импорта');
-        }
-
-        return [
-            'jobId' => $result->getId(),
-        ];
+        return ['jobId' => $jobId];
     }
 
     /**
      * Возвращает прогресс задачи импорта
-     *
-     * @return array
-     * @throws AccessDeniedException
      */
     public function getProgressAction(): array
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
+        $this->checkAdmin();
 
-        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
-        $jobId = (int) $request->getPost('jobId');
+        $service = new ImportJobService();
 
-        if (!$jobId) {
-            throw new RuntimeException('Job ID не указан');
-        }
-
-        $job = ImportJobTable::getById($jobId)->fetch();
-
-        if (!$job) {
-            throw new RuntimeException('Задача не найдена');
-        }
-
-        if ((int) $job['USER_ID'] !== (int) CurrentUser::get()->getId()) {
-            throw new AccessDeniedException();
-        }
-
-        $isComplete = in_array($job['STATUS'], [
-            ImportJobStatus::Completed->value,
-            ImportJobStatus::Error->value,
-        ], true);
-
-        $totalRows = (int) $job['TOTAL_ROWS'];
-
-        $response = [
-            'status' => $job['STATUS'],
-            'totalRows' => $totalRows,
-            'processedRows' => (int) $job['PROCESSED_ROWS'],
-            'successCount' => (int) $job['SUCCESS_COUNT'],
-            'errorCount' => (int) $job['ERROR_COUNT'],
-            'isComplete' => $isComplete,
-            'progress' => $totalRows > 0
-                ? round(((int) $job['PROCESSED_ROWS'] / $totalRows) * 100, 1)
-                : 0,
-        ];
-
-        // При завершении — отдаём ошибки для подсветки грида
-        if ($isComplete && !empty($job['ERRORS_DATA'])) {
-            try {
-                $errors = unserialize($job['ERRORS_DATA']);
-
-                if (is_array($errors)) {
-                    $gridErrors = [];
-
-                    // Извлекаем системную ошибку (исключение из processBatch)
-                    if (isset($errors['__exception__'])) {
-                        $exceptionErrors = $errors['__exception__'];
-                        unset($errors['__exception__']);
-
-                        if (is_array($exceptionErrors)) {
-                            foreach ($exceptionErrors as $err) {
-                                if (is_object($err) && method_exists($err, 'toArray')) {
-                                    $response['errorMessage'] = $err->message ?? $err->toArray()['message'] ?? null;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    foreach ($errors as $rowIndex => $rowErrors) {
-                        if (!is_array($rowErrors)) {
-                            continue;
-                        }
-                        $gridErrors[$rowIndex] = array_map(
-                            function ($error) {
-                                if (is_object($error) && method_exists($error, 'toArray')) {
-                                    return $error->toArray();
-                                }
-                                return is_array($error) ? $error : ['message' => (string) $error];
-                            },
-                            $rowErrors
-                        );
-                    }
-
-                    $response['errors'] = $gridErrors;
-                    $response['fieldToColumn'] = $this->getFieldToColumnMapping($job['ENTITY_TYPE']);
-                }
-            } catch (\Throwable) {
-                // Битые данные — не ломаем ответ
-            }
-        }
-
-        // Если статус error но нет конкретного errorMessage — даём generic
-        if ($job['STATUS'] === ImportJobStatus::Error->value && empty($response['errorMessage'])) {
-            $response['errorMessage'] = 'Произошла системная ошибка при обработке импорта';
-        }
-
-        return $response;
+        return $service->getProgress(
+            $this->getRequestInt('jobId'),
+            (int) CurrentUser::get()->getId()
+        );
     }
+
 
     /**
      * Возвращает статистику задач импорта с пагинацией
-     *
-     * @return array
-     * @throws AccessDeniedException
      */
     public function getStatsAction(): array
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
+        $this->checkAdmin();
 
-        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
-        $page = max(1, (int) $request->getPost('page'));
-        $pageSize = 20;
-        $offset = ($page - 1) * $pageSize;
+        $page = max(1, $this->getRequestInt('page'));
+        $service = new ImportJobService();
 
-        // Общее количество записей
-        $countResult = ImportJobTable::getList([
-            'select' => ['CNT'],
-            'runtime' => [
-                new ExpressionField('CNT', 'COUNT(*)'),
-            ],
-        ])->fetch();
-        $totalCount = (int) ($countResult['CNT'] ?? 0);
-        $totalPages = max(1, (int) ceil($totalCount / $pageSize));
-
-        // Выборка задач без тяжёлых блобов IMPORT_DATA и ERRORS_DATA
-        $dbResult = ImportJobTable::getList([
-            'select' => [
-                'ID', 'USER_ID', 'ENTITY_TYPE', 'STATUS',
-                'TOTAL_ROWS', 'PROCESSED_ROWS', 'SUCCESS_COUNT', 'ERROR_COUNT',
-                'CREATED_IDS',
-                'CREATED_AT', 'STARTED_AT', 'FINISHED_AT',
-            ],
-            'order' => ['ID' => 'DESC'],
-            'limit' => $pageSize,
-            'offset' => $offset,
-        ]);
-
-        $jobs = [];
-        $userIds = [];
-
-        while ($row = $dbResult->fetch()) {
-            $jobs[] = $row;
-            $userIds[$row['USER_ID']] = true;
-        }
-
-        // Резолв имён пользователей одним запросом
-        $userNames = [];
-        if (!empty($userIds)) {
-            $userResult = UserTable::getList([
-                'select' => ['ID', 'NAME', 'LAST_NAME', 'LOGIN'],
-                'filter' => ['=ID' => array_keys($userIds)],
-            ]);
-            while ($user = $userResult->fetch()) {
-                $fullName = trim(($user['LAST_NAME'] ?? '') . ' ' . ($user['NAME'] ?? ''));
-                if ($fullName === '') {
-                    $fullName = $user['LOGIN'];
-                }
-                $userNames[(int) $user['ID']] = $fullName;
-            }
-        }
-
-        // Маппинг ключей сущностей в названия
-        $entityTitles = [];
-        foreach (EntityRegistry::getAllForUi() as $key => $config) {
-            $entityTitles[$key] = $config['title'];
-        }
-
-        // Форматирование результатов
-        $items = [];
-        foreach ($jobs as $job) {
-            $userId = (int) $job['USER_ID'];
-            $items[] = [
-                'id' => (int) $job['ID'],
-                'userId' => $userId,
-                'userName' => $userNames[$userId] ?? ('User #' . $userId),
-                'entityType' => $job['ENTITY_TYPE'],
-                'entityTitle' => $entityTitles[$job['ENTITY_TYPE']] ?? $job['ENTITY_TYPE'],
-                'status' => $job['STATUS'],
-                'totalRows' => (int) $job['TOTAL_ROWS'],
-                'processedRows' => (int) $job['PROCESSED_ROWS'],
-                'successCount' => (int) $job['SUCCESS_COUNT'],
-                'errorCount' => (int) $job['ERROR_COUNT'],
-                'createdIds' => !empty($job['CREATED_IDS'])
-                    ? unserialize($job['CREATED_IDS'])
-                    : [],
-                'createdAt' => $job['CREATED_AT'] ? $job['CREATED_AT']->toString() : null,
-                'startedAt' => $job['STARTED_AT'] ? $job['STARTED_AT']->toString() : null,
-                'finishedAt' => $job['FINISHED_AT'] ? $job['FINISHED_AT']->toString() : null,
-            ];
-        }
-
-        return [
-            'items' => $items,
-            'pagination' => [
-                'page' => $page,
-                'pageSize' => $pageSize,
-                'totalCount' => $totalCount,
-                'totalPages' => $totalPages,
-            ],
-        ];
+        return $service->getHistory($page);
     }
+
 
     /**
      * Очищает данные импорта из сессии
-     *
-     * @return array
      */
     public function clearAction(): array
     {
@@ -662,15 +319,10 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
     /**
      * Скачивает XLSX-шаблон для импорта
-     *
-     * @throws AccessDeniedException
-     * @throws LoaderException
      */
     public function downloadXlsxTemplateAction(): void
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
+        $this->checkAdmin();
 
         $entityType = $this->resolveEntityType();
         $repository = EntityRegistry::createRepository($entityType);
@@ -686,24 +338,13 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
     /**
      * Скачивает XLSX-отчёт с ошибками dry-run
-     *
-     * Ожидает POST-данные:
-     * - errors: объект ошибок по строкам {rowIndex: [{message}, ...]}
-     *
-     * @throws AccessDeniedException
      */
     public function downloadErrorReportAction(): void
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
+        $this->checkAdmin();
+        $this->checkData();
 
-        if (!SessionStorage::hasData()) {
-            throw new RuntimeException('Нет данных для экспорта');
-        }
-
-        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
-        $errorsJson = $request->getPost('errors');
+        $errorsJson = $this->getRequestParam('errors');
         $errors = $errorsJson ? json_decode($errorsJson, true) : [];
 
         $columns = SessionStorage::getColumns();
@@ -717,32 +358,23 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
     /**
      * Скачивает XLSX-отчёт по задаче импорта из статистики
-     *
-     * Ожидает POST-данные:
-     * - jobId: ID задачи импорта
-     *
-     * @throws AccessDeniedException
      */
     public function downloadStatsReportAction(): void
     {
-        if (!CurrentUser::get()->isAdmin()) {
-            throw new AccessDeniedException();
-        }
+        $this->checkAdmin();
 
-        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
-        $jobId = (int)$request->getPost('jobId');
+        $jobId = $this->getRequestInt('jobId');
 
         if (!$jobId) {
             throw new RuntimeException('Job ID не указан');
         }
 
-        $job = ImportJobTable::getById($jobId)->fetch();
+        $job = \Rwb\Massops\Queue\ImportJobTable::getById($jobId)->fetch();
 
         if (!$job) {
             throw new RuntimeException('Задача не найдена');
         }
 
-        // Маппинг типов сущностей в названия
         $entityTitles = [];
         foreach (EntityRegistry::getAllForUi() as $key => $config) {
             $entityTitles[$key] = $config['title'];
@@ -752,5 +384,145 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $filename = $job['ENTITY_TYPE'] . '_import_report_' . $jobId . '.xlsx';
 
         StatsReportExporter::export($job, $entityTitle, $filename);
+    }
+
+
+    /**
+     * Проверяет права администратора
+     */
+    private function checkAdmin(): void
+    {
+        if (!CurrentUser::get()->isAdmin()) {
+            throw new AccessDeniedException();
+        }
+    }
+
+    /**
+     * Проверяет наличие данных в сессии
+     */
+    private function checkData(): void
+    {
+        if (!SessionStorage::hasData()) {
+            throw new RuntimeException('Нет данных для импорта');
+        }
+    }
+
+    /**
+     * Получает строковый параметр из POST или GET запроса
+     */
+    private function getRequestParam(string $key): ?string
+    {
+        $request = \Bitrix\Main\Application::getInstance()->getContext()->getRequest();
+
+        return $request->getPost($key) ?? $request->get($key);
+    }
+
+    /**
+     * Получает числовой параметр из запроса
+     */
+    private function getRequestInt(string $key): int
+    {
+        return (int) $this->getRequestParam($key);
+    }
+
+    /**
+     * Определяет тип сущности из запроса или сессии
+     */
+    private function resolveEntityType(): string
+    {
+        $entityType = $this->getRequestParam('entityType')
+            ?? SessionStorage::getEntityType();
+
+        if (!$entityType || !EntityRegistry::has($entityType)) {
+            throw new RuntimeException('Тип сущности не указан');
+        }
+
+        return $entityType;
+    }
+
+    /**
+     * Собирает опции импорта из запроса
+     */
+    private function buildImportOptions(string $entityType): array
+    {
+        $options = [
+            'columns' => SessionStorage::getColumns(),
+        ];
+
+        if ($entityType === 'company' && $this->getRequestParam('createCabinets') === 'Y') {
+            $options['createCabinets'] = true;
+        }
+
+        return $options;
+    }
+
+    /**
+     * Форматирует ошибки импорта для грида
+     */
+    private function formatGridErrors(array $errors): array
+    {
+        $gridErrors = [];
+
+        foreach ($errors as $rowIndex => $rowErrors) {
+            $gridErrors[$rowIndex] = array_map(
+                fn($error) => $error->toArray(),
+                $rowErrors
+            );
+        }
+
+        return $gridErrors;
+    }
+
+    /**
+     * Возвращает маппинг кодов полей CRM на ID колонок грида
+     */
+    private function getFieldToColumnMapping(string $entityType): array
+    {
+        $repository = EntityRegistry::createRepository($entityType);
+        $fieldCodes = array_keys($repository->getFieldList());
+        $mapping = [];
+
+        foreach ($fieldCodes as $index => $code) {
+            $mapping[$code] = 'COL_' . $index;
+        }
+
+        return $mapping;
+    }
+
+    /**
+     * Получает параметры сортировки грида
+     */
+    private function getGridSort(): array
+    {
+        $gridOptions = new \Bitrix\Main\Grid\Options(self::GRID_ID);
+        $sorting = $gridOptions->GetSorting([
+            'sort' => ['COL_0' => 'ASC'],
+            'vars' => ['by' => 'by', 'order' => 'order'],
+        ]);
+
+        $sort = $sorting['sort'] ?? [];
+        $by = key($sort) ?: '';
+        $order = current($sort) ?: 'ASC';
+
+        return ['by' => $by, 'order' => $order];
+    }
+
+    /**
+     * Получает размер страницы грида из настроек пользователя
+     */
+    private function getGridPageSize(): int
+    {
+        $gridOptions = new \Bitrix\Main\Grid\Options(self::GRID_ID);
+        $navParams = $gridOptions->GetNavParams([
+            'nPageSize' => self::GRID_DEFAULT_PAGE_SIZE,
+        ]);
+
+        $pageSize = (int) ($navParams['nPageSize'] ?? self::GRID_DEFAULT_PAGE_SIZE);
+
+        if (!in_array($pageSize, self::GRID_ALLOWED_PAGE_SIZES, true)) {
+            $pageSize = self::GRID_DEFAULT_PAGE_SIZE;
+        }
+
+        return $pageSize;
     }
 }

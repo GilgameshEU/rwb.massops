@@ -76,12 +76,10 @@
             block.appendChild(statsEl);
 
             if (allErrors.length > 0) {
-                // Группируем ошибки по категориям
                 var grouped = this.buildGroupedErrors(allErrors);
                 var groupedHtml = this.buildGroupedErrorsHtml(grouped);
                 block.appendChild(groupedHtml);
 
-                // Кнопка скачивания отчёта с ошибками (только для dry-run с ошибками)
                 if (isDryRun) {
                     var downloadBtn = BX.create('button', {
                         props: {className: 'ui-btn ui-btn-light ui-btn-xs rwb-result-download'},
@@ -104,20 +102,17 @@
          * @param {Object} errorsByRow Ошибки по строкам
          */
         downloadErrorReport: function (errorsByRow) {
-            // Создаём скрытую форму для POST-запроса на Bitrix AJAX endpoint
             var form = document.createElement('form');
             form.method = 'POST';
             form.action = '/bitrix/services/main/ajax.php?c=rwb:massops.main&action=downloadErrorReport&mode=class';
             form.style.display = 'none';
 
-            // Добавляем sessid
             var sessidInput = document.createElement('input');
             sessidInput.type = 'hidden';
             sessidInput.name = 'sessid';
             sessidInput.value = BX.bitrix_sessid();
             form.appendChild(sessidInput);
 
-            // Добавляем ошибки как JSON
             var errorsInput = document.createElement('input');
             errorsInput.type = 'hidden';
             errorsInput.name = 'errors';
@@ -149,7 +144,6 @@
                 var context = error.context || {};
 
                 if (code === 'DUPLICATE_IN_FILE' && context.inn) {
-                    // Дубликаты внутри файла — группируем по ИНН
                     var inn = String(context.inn);
                     if (!fileDuplicates[inn]) {
                         fileDuplicates[inn] = [];
@@ -158,13 +152,11 @@
                         fileDuplicates[inn].push(row);
                     }
                 } else if (code === 'DUPLICATE_IN_CRM' && context.existingCompanyId) {
-                    // Дубликаты в CRM
                     crmDuplicates.push({
                         row: row,
                         companyId: context.existingCompanyId
                     });
                 } else {
-                    // Остальные ошибки валидации — группируем по коду
                     var key = code || error.message || 'UNKNOWN';
                     if (!validationErrors[key]) {
                         validationErrors[key] = {
@@ -195,7 +187,6 @@
             var fragment = document.createDocumentFragment();
             var self = this;
 
-            // 1. Ошибки валидации
             var validationKeys = Object.keys(grouped.validation);
             if (validationKeys.length > 0) {
                 var valSection = BX.create('div', {props: {className: 'rwb-error-section'}});
@@ -221,7 +212,6 @@
                 fragment.appendChild(valSection);
             }
 
-            // 2. Дубликаты ИНН внутри файла
             var fileInnKeys = Object.keys(grouped.fileDuplicates);
             if (fileInnKeys.length > 0) {
                 var fileSection = BX.create('div', {props: {className: 'rwb-error-section'}});
@@ -244,7 +234,6 @@
                 fragment.appendChild(fileSection);
             }
 
-            // 3. Дубликаты в CRM
             if (grouped.crmDuplicates.length > 0) {
                 var crmSection = BX.create('div', {props: {className: 'rwb-error-section'}});
                 var crmTitle = BX.create('div', {
@@ -270,7 +259,6 @@
             return fragment;
         },
 
-        // --- Вспомогательные методы ---
 
         createBlock: function (id, modifier) {
             return BX.create('div', {

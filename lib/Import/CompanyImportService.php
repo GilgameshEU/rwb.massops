@@ -51,7 +51,6 @@ class CompanyImportService extends ImportService
      */
     protected function processRows(array $rows, ImportMode $mode, array $options = []): array
     {
-        // Получаем коды полей из заголовков файла (если переданы колонки)
         $fieldCodes = $this->resolveFieldCodes($options['columns'] ?? []);
         $fieldTypes = $this->repository->getFieldTypeMap();
         $multipleFields = $this->repository->getMultipleFieldCodes();
@@ -65,7 +64,6 @@ class CompanyImportService extends ImportService
 
         $dryRun = ($mode === ImportMode::DryRun);
 
-        // === ШАГ 1: Проверка дублей внутри файла ===
         $fileDuplicateErrors = [];
         if ($innFieldCode) {
             $fileDuplicateErrors = $this->checkFileInternalDuplicates($rows, $fieldCodes, $innFieldCode);
@@ -74,12 +72,10 @@ class CompanyImportService extends ImportService
             }
         }
 
-        // === ШАГ 2: Нормализация и базовая валидация ===
         $normalizedRows = [];
         $validRowIndexes = [];
 
         foreach ($rows as $rowIndex => $row) {
-            // Пропускаем строки с дублями в файле
             if (isset($fileDuplicateErrors[$rowIndex])) {
                 continue;
             }
@@ -96,10 +92,8 @@ class CompanyImportService extends ImportService
             $uf = $normalized->uf;
             $fm = $normalized->fm;
 
-            // Резолюция полей типа "Пользователь" (ASSIGNED_BY_ID и др.)
             $userErrors = $this->resolveUserFields($fields, $fieldTypes);
 
-            // Применяем опции импорта
             $this->applyImportOptions($uf, $options);
 
             $normalizedRows[$rowIndex] = [
@@ -111,7 +105,6 @@ class CompanyImportService extends ImportService
 
             $hasErrors = false;
 
-            // Ошибки резолюции пользователей
             if (!empty($userErrors)) {
                 foreach ($userErrors as $error) {
                     $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
@@ -119,7 +112,6 @@ class CompanyImportService extends ImportService
                 $hasErrors = true;
             }
 
-            // Ошибки нормализации
             if (!empty($normalized->errors)) {
                 foreach ($normalized->errors as $error) {
                     $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
@@ -127,7 +119,6 @@ class CompanyImportService extends ImportService
                 $hasErrors = true;
             }
 
-            // Бизнес-валидация
             $validation = $this->validateRow($fields, $uf, $fm);
             if (!$validation->isValid()) {
                 foreach ($validation->getErrors() as $error) {
@@ -141,7 +132,6 @@ class CompanyImportService extends ImportService
             }
         }
 
-        // === ШАГ 3: Проверка дублей в CRM (только для валидных строк) ===
         $crmDuplicateErrors = [];
         if ($innFieldCode && !empty($validRowIndexes)) {
             $crmDuplicateErrors = $this->checkCrmDuplicates(
@@ -154,9 +144,7 @@ class CompanyImportService extends ImportService
             }
         }
 
-        // === ШАГ 4: Сохранение в CRM ===
         foreach ($validRowIndexes as $rowIndex) {
-            // Пропускаем строки с дублями в CRM
             if (isset($crmDuplicateErrors[$rowIndex])) {
                 continue;
             }
@@ -187,7 +175,6 @@ class CompanyImportService extends ImportService
                 ? $result->getId()
                 : null;
 
-            // Привязываем источник сквозной аналитики
             if ($entityId && !$dryRun) {
                 $this->assignTrackingSource($entityId);
             }
@@ -217,7 +204,6 @@ class CompanyImportService extends ImportService
         $result = new ValidationResult();
         $innFieldCode = $this->getInnFieldCode();
 
-        // ИНН обязателен
         if ($innFieldCode && empty($uf[$innFieldCode])) {
             $result->addError(
                 new ImportError(

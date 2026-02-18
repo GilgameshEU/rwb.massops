@@ -117,12 +117,12 @@ $svgIcons = [
                         <div class="rwb-dropzone__text">
                             Перетащите файл сюда или <strong>нажмите для выбора</strong>
                         </div>
-                        <div class="rwb-dropzone__formats">Поддерживаемые форматы: .xlsx, .csv</div>
+                        <div class="rwb-dropzone__formats">Поддерживаемый формат: .xlsx</div>
                         <div class="rwb-dropzone__file-info">
                             <span class="rwb-dropzone__file-name"></span>
                             <span class="rwb-dropzone__file-remove" title="Убрать файл">&times;</span>
                         </div>
-                        <input type="file" id="rwb-import-file" accept=".csv,.xlsx" style="display: none;">
+                        <input type="file" id="rwb-import-file" accept=".xlsx" style="display: none;">
                     </div>
 
                     <a class="rwb-dropzone__template-link" id="rwb-import-template">Скачать шаблон импорта</a>

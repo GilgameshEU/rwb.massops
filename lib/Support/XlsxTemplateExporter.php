@@ -44,7 +44,6 @@ class XlsxTemplateExporter
     {
         $spreadsheet = new Spreadsheet();
 
-        // Определяем обязательные поля (статические + динамические UF)
         $extraRequired = self::EXTRA_REQUIRED_FIELDS[$entityType] ?? [];
         $extraRequiredUf = self::getExtraRequiredUfCodes($entityType);
         $allExtraRequired = array_merge($extraRequired, $extraRequiredUf);
@@ -63,12 +62,10 @@ class XlsxTemplateExporter
             }
         }
 
-        // Лист 1: Шаблон для импорта (только обязательные поля)
         $templateSheet = $spreadsheet->getActiveSheet();
         $templateSheet->setTitle('Импорт');
         self::fillTemplateSheet($templateSheet, $requiredFields);
 
-        // Лист 2: Справочник полей
         $referenceSheet = $spreadsheet->createSheet();
         $referenceSheet->setTitle('Справочник полей');
         self::fillReferenceSheet($referenceSheet, $requiredFields, $optionalFields);
@@ -102,7 +99,6 @@ class XlsxTemplateExporter
      */
     private static function fillReferenceSheet(Worksheet $sheet, array $requiredFields, array $optionalFields): void
     {
-        // Заголовки
         $sheet->setCellValue('A1', 'Название поля');
         $sheet->setCellValue('B1', 'Тип данных');
         $sheet->setCellValue('C1', 'Допустимые значения');
@@ -111,24 +107,20 @@ class XlsxTemplateExporter
 
         $row = 2;
 
-        // Сначала обязательные поля
         foreach ($requiredFields as $code => $field) {
             self::writeFieldRow($sheet, $row, $field, true);
             $row++;
         }
 
-        // Затем опциональные поля
         foreach ($optionalFields as $code => $field) {
             self::writeFieldRow($sheet, $row, $field, false);
             $row++;
         }
 
-        // Настройка ширины колонок
         $sheet->getColumnDimension('A')->setWidth(40);
         $sheet->getColumnDimension('B')->setWidth(20);
         $sheet->getColumnDimension('C')->setWidth(60);
 
-        // Включаем перенос текста для колонки со значениями
         $sheet->getStyle('C2:C' . ($row - 1))->getAlignment()->setWrapText(true);
     }
 
@@ -140,7 +132,6 @@ class XlsxTemplateExporter
         $sheet->setCellValue('A' . $row, $field['title']);
         $sheet->setCellValue('B' . $row, $field['type']);
 
-        // Допустимые значения для enum полей
         $enumText = '';
         if (!empty($field['enumValues'])) {
             $values = array_map(
@@ -151,7 +142,6 @@ class XlsxTemplateExporter
         }
         $sheet->setCellValue('C' . $row, $enumText);
 
-        // Стиль для обязательных полей
         if ($isRequired) {
             self::applyRequiredRowStyle($sheet, $row);
         }

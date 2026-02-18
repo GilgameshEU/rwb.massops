@@ -38,7 +38,6 @@ class DuplicateChecker
         $errors = [];
         $innToRows = [];
 
-        // Собираем ИНН по строкам
         foreach ($rows as $rowIndex => $row) {
             $inn = $this->extractInn($row, $innFieldCode);
 
@@ -54,10 +53,8 @@ class DuplicateChecker
             $innToRows[$inn][] = $rowIndex;
         }
 
-        // Находим дубликаты (ИНН встречается более 1 раза)
         foreach ($innToRows as $inn => $rowIndexes) {
             if (count($rowIndexes) > 1) {
-                // Помечаем ВСЕ строки с этим ИНН как дубликаты
                 foreach ($rowIndexes as $rowIndex) {
                     $duplicateRows = array_diff($rowIndexes, [$rowIndex]);
                     $duplicateRowsHuman = array_map(fn($i) => $i + 1, $duplicateRows);
@@ -95,7 +92,6 @@ class DuplicateChecker
 
         $errors = [];
 
-        // Собираем ИНН из валидных строк
         $innToRow = [];
         foreach ($rows as $rowIndex => $row) {
             if (in_array($rowIndex, $excludeRowIndexes, true)) {
@@ -115,7 +111,6 @@ class DuplicateChecker
             return $errors;
         }
 
-        // Ищем существующие компании с такими ИНН
         $existingCompanies = $this->findCompaniesByInn(array_keys($innToRow), $innFieldCode);
 
         foreach ($existingCompanies as $inn => $companyId) {
@@ -155,22 +150,18 @@ class DuplicateChecker
      */
     private function extractInn(array $row, string $innFieldCode): ?string
     {
-        // Данные могут быть в разных форматах
         if (isset($row['uf'][$innFieldCode])) {
             return $row['uf'][$innFieldCode];
         }
 
-        // Или в плоском формате data
         if (isset($row['data'])) {
             foreach ($row['data'] as $key => $value) {
-                // Ищем по коду поля в маппинге
                 if ($key === $innFieldCode) {
                     return $value;
                 }
             }
         }
 
-        // Прямой доступ
         if (isset($row[$innFieldCode])) {
             return $row[$innFieldCode];
         }
@@ -202,7 +193,6 @@ class DuplicateChecker
             return $result;
         }
 
-        // Используем CCompany для поиска
         $filter = [
             'CHECK_PERMISSIONS' => 'N',
             $innFieldCode => $innList,

@@ -39,12 +39,10 @@ class UserResolver
             return null;
         }
 
-        // Числовой ID
         if (ctype_digit($value)) {
             return $this->resolveById((int) $value);
         }
 
-        // Текст: "Имя Фамилия" или "Фамилия Имя"
         return $this->resolveByName($value);
     }
 
@@ -80,15 +78,12 @@ class UserResolver
         $parts = preg_split('/\s+/', trim($fullName), 2);
 
         if (count($parts) !== 2) {
-            // Одно слово — невозможно определить имя/фамилию
             $this->nameCache[$cacheKey] = false;
             return null;
         }
 
-        // Попытка 1: "Имя Фамилия"
         $userId = $this->findUserByNameParts($parts[0], $parts[1]);
 
-        // Попытка 2: "Фамилия Имя"
         if ($userId === null) {
             $userId = $this->findUserByNameParts($parts[1], $parts[0]);
         }

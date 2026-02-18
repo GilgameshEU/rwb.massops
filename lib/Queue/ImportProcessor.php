@@ -52,7 +52,6 @@ class ImportProcessor
 
         $status = $job['STATUS'];
 
-        // Уже завершена
         if (in_array($status, [
             ImportJobStatus::Completed->value,
             ImportJobStatus::Error->value,
@@ -60,7 +59,6 @@ class ImportProcessor
             return false;
         }
 
-        // Первый запуск — пометить как processing
         if ($status === ImportJobStatus::Pending->value) {
             ImportJobTable::update($jobId, [
                 'STATUS' => ImportJobStatus::Processing->value,
@@ -69,7 +67,6 @@ class ImportProcessor
         }
 
         try {
-            // Десериализация данных
             $allRows = unserialize($job['IMPORT_DATA']);
 
             if (!is_array($allRows)) {
@@ -85,7 +82,6 @@ class ImportProcessor
             $totalRows = (int) $job['TOTAL_ROWS'];
             $batchSize = $this->getBatchSize();
 
-            // Десериализация опций импорта
             $options = [];
             if (!empty($job['IMPORT_OPTIONS'])) {
                 $options = unserialize($job['IMPORT_OPTIONS']);
@@ -93,18 +89,15 @@ class ImportProcessor
 
             $endIndex = min($startIndex + $batchSize, $totalRows);
 
-            // Вырезаем пачку строк (с сохранением ключей)
             $allRowsIndexed = array_values($allRows);
             $batchRows = [];
             for ($i = $startIndex; $i < $endIndex; $i++) {
                 $batchRows[$i] = $allRowsIndexed[$i];
             }
 
-            // Обработка пачки через ImportService с опциями
             $importService = EntityRegistry::createImportService($entityType);
             $result = $importService->import($batchRows, $options);
 
-            // Накопление ошибок
             $existingErrors = !empty($job['ERRORS_DATA'])
                 ? unserialize($job['ERRORS_DATA'])
                 : [];
@@ -115,7 +108,6 @@ class ImportProcessor
                 }
             }
 
-            // Накопление ID созданных сущностей
             $existingIds = !empty($job['CREATED_IDS'])
                 ? unserialize($job['CREATED_IDS'])
                 : [];
@@ -128,7 +120,6 @@ class ImportProcessor
                 }
             }
 
-            // Обновление прогресса
             $newProcessed = $endIndex;
             $newSuccess = (int) $job['SUCCESS_COUNT'] + $result['success'];
             $newErrorCount = (int) $job['ERROR_COUNT'] + count($result['errors']);
@@ -141,7 +132,6 @@ class ImportProcessor
                 'CREATED_IDS' => serialize($existingIds),
             ];
 
-            // Проверяем завершение
             $isComplete = ($newProcessed >= $totalRows);
 
             if ($isComplete) {
@@ -153,8 +143,6 @@ class ImportProcessor
 
             return !$isComplete;
         } catch (\Throwable $e) {
-            // При любой ошибке — переводим задачу в статус error
-            // и сохраняем текст исключения в ERRORS_DATA для отображения на фронтенде
             $errorsData = [];
             try {
                 if (!empty($job['ERRORS_DATA'])) {

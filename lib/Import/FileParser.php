@@ -5,7 +5,6 @@ namespace Rwb\Massops\Import;
 use Exception;
 use InvalidArgumentException;
 use RuntimeException;
-use Rwb\Massops\Import\Parser\CsvParser;
 use Rwb\Massops\Import\Parser\XlsxParser;
 
 /**
@@ -29,9 +28,8 @@ final class FileParser
 
         try {
             $parser = match ($extension) {
-                'csv' => new CsvParser(),
                 'xlsx' => new XlsxParser(),
-                default => throw new InvalidArgumentException('Unsupported format'),
+                default => throw new InvalidArgumentException('Неподдерживаемый формат файла. Используйте .xlsx'),
             };
 
             $data = $this->normalizeUtf8(

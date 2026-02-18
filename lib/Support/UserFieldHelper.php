@@ -27,12 +27,10 @@ class UserFieldHelper
     {
         $cacheKey = $entityId . '|' . $xmlId;
 
-        // Проверяем кэш
         if (isset(self::$cache[$cacheKey])) {
             return self::$cache[$cacheKey];
         }
 
-        // Ищем в БД
         $field = UserFieldTable::getList([
             'filter' => [
                 '=ENTITY_ID' => $entityId,
@@ -44,7 +42,6 @@ class UserFieldHelper
 
         $fieldName = $field ? $field['FIELD_NAME'] : null;
 
-        // Кэшируем результат
         self::$cache[$cacheKey] = $fieldName;
 
         return $fieldName;

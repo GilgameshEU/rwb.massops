@@ -222,13 +222,11 @@ final class CrmRepository
                 continue;
             }
 
-            // Для UF-полей берём USER_TYPE_ID
             if (str_starts_with($fieldName, 'UF_') && isset($ufFieldsInfo[$fieldName])) {
                 $this->fieldTypeMapCache[$fieldName] = $ufFieldsInfo[$fieldName]['USER_TYPE_ID'] ?? 'string';
                 continue;
             }
 
-            // Для стандартных полей маппим тип
             $this->fieldTypeMapCache[$fieldName] = $field->getType();
         }
 
@@ -364,7 +362,6 @@ final class CrmRepository
 
             $fieldName = $field->getName();
 
-            // Мультиполя (телефон, email)
             if ($fieldName === Item::FIELD_NAME_FM) {
                 $result['PHONE'] = [
                     'code' => 'PHONE',
@@ -383,7 +380,6 @@ final class CrmRepository
                 continue;
             }
 
-            // Для UF полей берём информацию из CUserTypeEntity
             $extendedFieldInfo = $fieldsInfo[$fieldName] ?? [];
             if (str_starts_with($fieldName, 'UF_') && isset($ufFieldsInfo[$fieldName])) {
                 $extendedFieldInfo = array_merge($extendedFieldInfo, $ufFieldsInfo[$fieldName]);
@@ -462,7 +458,6 @@ final class CrmRepository
             return $typeMap[$type];
         }
 
-        // Для UF полей
         if (str_starts_with($field->getName(), 'UF_')) {
             $userType = $fieldInfo['USER_TYPE_ID'] ?? $fieldInfo['TYPE'] ?? null;
 
@@ -536,7 +531,6 @@ final class CrmRepository
         $type = $field->getType();
         $fieldName = $field->getName();
 
-        // CRM статусы (SOURCE_ID, INDUSTRY и т.п.)
         if ($type === Field::TYPE_CRM_STATUS) {
             $statusEntityId = $fieldInfo['CRM_STATUS_TYPE'] ?? null;
             if ($statusEntityId) {
@@ -544,7 +538,6 @@ final class CrmRepository
             }
         }
 
-        // UF поля типа enumeration
         if (str_starts_with($fieldName, 'UF_')) {
             $userType = $fieldInfo['USER_TYPE_ID'] ?? $fieldInfo['TYPE'] ?? null;
 

@@ -28,12 +28,10 @@ class StatsReportExporter
     {
         $spreadsheet = new Spreadsheet();
 
-        // Лист 1: Сводная информация
         $summarySheet = $spreadsheet->getActiveSheet();
         $summarySheet->setTitle('Сводка');
         self::fillSummarySheet($summarySheet, $job, $entityTitle);
 
-        // Лист 2: Добавленные сущности (ID + название)
         $createdIds = !empty($job['CREATED_IDS']) ? unserialize($job['CREATED_IDS']) : [];
         if (!empty($createdIds)) {
             $entitiesSheet = $spreadsheet->createSheet();
@@ -41,7 +39,6 @@ class StatsReportExporter
             self::fillEntitiesSheet($entitiesSheet, $createdIds, $job['ENTITY_TYPE']);
         }
 
-        // Лист 3: Ошибки (если есть)
         $errors = !empty($job['ERRORS_DATA']) ? unserialize($job['ERRORS_DATA']) : [];
         if (!empty($errors)) {
             $errorsSheet = $spreadsheet->createSheet();
@@ -57,7 +54,6 @@ class StatsReportExporter
      */
     private static function fillSummarySheet(Worksheet $sheet, array $job, string $entityTitle): void
     {
-        // Получаем информацию о пользователе
         $userName = self::getUserName((int) $job['USER_ID']);
 
         $data = [
@@ -81,7 +77,6 @@ class StatsReportExporter
             $row++;
         }
 
-        // Стиль заголовков
         $sheet->getStyle('A1:B1')->applyFromArray([
             'font' => ['bold' => true],
             'fill' => [
@@ -90,7 +85,6 @@ class StatsReportExporter
             ],
         ]);
 
-        // Стиль первой колонки
         $sheet->getStyle('A1:A' . ($row - 1))->applyFromArray([
             'font' => ['bold' => true],
         ]);
@@ -104,14 +98,12 @@ class StatsReportExporter
      */
     private static function fillEntitiesSheet(Worksheet $sheet, array $createdIds, string $entityType): void
     {
-        // Заголовки
         $sheet->setCellValue('A1', '№');
         $sheet->setCellValue('B1', 'ID');
         $sheet->setCellValue('C1', 'Название');
 
         self::applyHeaderStyle($sheet, 'A1:C1');
 
-        // Получаем названия сущностей
         $titles = self::getEntityTitles($createdIds, $entityType);
 
         $row = 2;
@@ -187,7 +179,6 @@ class StatsReportExporter
 
         self::applyHeaderStyle($sheet, 'A1:B1');
 
-        // Сортируем ошибки по номеру строки
         ksort($errors, SORT_NUMERIC);
 
         $row = 2;

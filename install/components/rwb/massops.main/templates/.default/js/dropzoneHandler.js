@@ -56,7 +56,6 @@
         _bindEvents: function () {
             var self = this;
 
-            // Клик по зоне — открыть диалог
             this._dropzone.addEventListener('click', function (e) {
                 if (e.target === self._removeBtn) {
                     return;
@@ -64,20 +63,17 @@
                 self._fileInput.click();
             });
 
-            // Выбор через диалог
             this._fileInput.addEventListener('change', function () {
                 if (self._fileInput.files.length > 0) {
                     self._setFile(self._fileInput.files[0]);
                 }
             });
 
-            // Удаление файла
             this._removeBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 self.clear();
             });
 
-            // Drag & Drop
             this._dropzone.addEventListener('dragover', function (e) {
                 e.preventDefault();
                 self._dropzone.classList.add('rwb-dropzone--dragover');
@@ -95,7 +91,7 @@
                     var file = e.dataTransfer.files[0];
                     var ext = file.name.split('.').pop().toLowerCase();
 
-                    if (ext === 'csv' || ext === 'xlsx') {
+                    if (ext === 'xlsx') {
                         self._setFile(file);
                     }
                 }
