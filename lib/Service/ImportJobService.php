@@ -84,6 +84,7 @@ class ImportJobService
         $totalRows = (int) $job['TOTAL_ROWS'];
 
         $response = [
+            'jobId' => $jobId,
             'status' => $job['STATUS'],
             'totalRows' => $totalRows,
             'processedRows' => (int) $job['PROCESSED_ROWS'],

@@ -123,9 +123,9 @@ class ImportProcessor
                 : [];
 
             if (!empty($result['added'])) {
-                foreach ($result['added'] as $item) {
+                foreach ($result['added'] as $rowIndex => $item) {
                     if (!empty($item['entityId'])) {
-                        $existingIds[] = (int) $item['entityId'];
+                        $existingIds[$rowIndex] = (int) $item['entityId'];
                     }
                 }
             }

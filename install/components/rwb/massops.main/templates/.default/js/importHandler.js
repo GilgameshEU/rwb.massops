@@ -120,7 +120,7 @@
                     }
 
                     window.RwbImportErrorHandler.showImportErrors(
-                        allErrors, gridErrors, result.successCount || 0, container, false
+                        allErrors, gridErrors, result.successCount || 0, container, false, result.jobId
                     );
 
                     var successRows = self._buildSuccessRows(
@@ -132,7 +132,7 @@
                         window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
                     }
 
-                    self._resetToolbar();
+                    self._showCompleteState(result);
                     self.lastReadyCount = null;
                 });
 
@@ -177,6 +177,31 @@
                 if (nothingMsg) {
                     nothingMsg.style.display = '';
                 }
+            }
+        },
+
+        /**
+         * Показывает состояние после завершения импорта
+         */
+        _showCompleteState: function (result) {
+            var actionsWrap = BX('rwb-import-actions');
+            var nothingMsg = BX('rwb-import-nothing');
+            var completeActions = BX('rwb-import-complete-actions');
+            var infoEl = document.querySelector('.rwb-preview__info');
+
+            this.checkBtn.style.display = 'none';
+
+            if (actionsWrap) {
+                actionsWrap.style.display = 'none';
+            }
+            if (nothingMsg) {
+                nothingMsg.style.display = 'none';
+            }
+            if (completeActions) {
+                completeActions.style.display = '';
+            }
+            if (infoEl) {
+                infoEl.innerHTML = 'Добавлено компаний: <strong>' + (result.successCount || 0) + '</strong>';
             }
         },
 

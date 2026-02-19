@@ -157,6 +157,12 @@ $svgIcons = [
                             <span id="rwb-import-nothing" class="rwb-preview__nothing" style="display: none;">
                                 Нет компаний для добавления
                             </span>
+
+                            <div id="rwb-import-complete-actions" style="display: none;">
+                                <a href="/crm/company/list/" class="ui-btn ui-btn-primary ui-btn-sm">
+                                    Перейти к компаниям
+                                </a>
+                            </div>
                         </div>
 
                         <div id="rwb-results-container"></div>

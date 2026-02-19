@@ -3,8 +3,8 @@
 namespace Rwb\Massops\Support;
 
 use Bitrix\Main\Application;
-use Bitrix\Main\Loader;
 use Bitrix\Main\UserTable;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -14,13 +14,16 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
  * Экспортёр XLSX-отчёта по завершённой задаче импорта
+ *
+ * Формат: лист «Сводка» + лист «Результаты импорта»
+ * (повторяет структуру исходного файла + колонка ID + колонка Ошибки)
  */
 class StatsReportExporter
 {
     /**
      * Создаёт и отдаёт XLSX-файл с результатами импорта
      *
-     * @param array  $job         Данные задачи из ImportJobTable
+     * @param array  $job         Данные задачи из ImportJobTable (включая IMPORT_DATA, IMPORT_OPTIONS)
      * @param string $entityTitle Название типа сущности
      * @param string $filename    Имя файла для скачивания
      */
@@ -28,23 +31,16 @@ class StatsReportExporter
     {
         $spreadsheet = new Spreadsheet();
 
+        $options = !empty($job['IMPORT_OPTIONS']) ? unserialize($job['IMPORT_OPTIONS']) : [];
+        $columns = $options['columns'] ?? [];
+
         $summarySheet = $spreadsheet->getActiveSheet();
         $summarySheet->setTitle('Сводка');
-        self::fillSummarySheet($summarySheet, $job, $entityTitle);
+        self::fillSummarySheet($summarySheet, $job, $entityTitle, $options);
 
-        $createdIds = !empty($job['CREATED_IDS']) ? unserialize($job['CREATED_IDS']) : [];
-        if (!empty($createdIds)) {
-            $entitiesSheet = $spreadsheet->createSheet();
-            $entitiesSheet->setTitle('Добавленные');
-            self::fillEntitiesSheet($entitiesSheet, $createdIds, $job['ENTITY_TYPE']);
-        }
-
-        $errors = !empty($job['ERRORS_DATA']) ? unserialize($job['ERRORS_DATA']) : [];
-        if (!empty($errors)) {
-            $errorsSheet = $spreadsheet->createSheet();
-            $errorsSheet->setTitle('Ошибки');
-            self::fillErrorsSheet($errorsSheet, $errors);
-        }
+        $resultsSheet = $spreadsheet->createSheet();
+        $resultsSheet->setTitle('Результаты импорта');
+        self::fillResultsSheet($resultsSheet, $job, $columns);
 
         self::output($spreadsheet, $filename);
     }
@@ -52,14 +48,16 @@ class StatsReportExporter
     /**
      * Заполняет лист со сводной информацией
      */
-    private static function fillSummarySheet(Worksheet $sheet, array $job, string $entityTitle): void
+    private static function fillSummarySheet(Worksheet $sheet, array $job, string $entityTitle, array $options): void
     {
         $userName = self::getUserName((int) $job['USER_ID']);
+        $createCabinets = !empty($options['createCabinets']) ? 'Да' : 'Нет';
 
         $data = [
             ['Параметр', 'Значение'],
             ['Пользователь', $userName],
             ['Тип сущности', $entityTitle],
+            ['Создание кабинетов', $createCabinets],
             ['Статус', self::getStatusLabel($job['STATUS'])],
             ['Всего строк', $job['TOTAL_ROWS']],
             ['Обработано', $job['PROCESSED_ROWS']],
@@ -94,107 +92,136 @@ class StatsReportExporter
     }
 
     /**
-     * Заполняет лист с добавленными сущностями (ID + название)
+     * Заполняет лист с результатами импорта
+     *
+     * Колонки: ID | (все колонки исходного файла) | Ошибки
      */
-    private static function fillEntitiesSheet(Worksheet $sheet, array $createdIds, string $entityType): void
+    private static function fillResultsSheet(Worksheet $sheet, array $job, array $columns): void
     {
-        $sheet->setCellValue('A1', '№');
-        $sheet->setCellValue('B1', 'ID');
-        $sheet->setCellValue('C1', 'Название');
+        $allRows = !empty($job['IMPORT_DATA']) ? unserialize($job['IMPORT_DATA']) : [];
+        $createdIds = !empty($job['CREATED_IDS']) ? unserialize($job['CREATED_IDS']) : [];
+        $errors = !empty($job['ERRORS_DATA']) ? unserialize($job['ERRORS_DATA']) : [];
 
-        self::applyHeaderStyle($sheet, 'A1:C1');
-
-        $titles = self::getEntityTitles($createdIds, $entityType);
-
-        $row = 2;
-        foreach ($createdIds as $index => $id) {
-            $sheet->setCellValue('A' . $row, $index + 1);
-            $sheet->setCellValue('B' . $row, $id);
-            $sheet->setCellValue('C' . $row, $titles[$id] ?? '—');
-            $row++;
+        if (!is_array($allRows)) {
+            $allRows = [];
+        }
+        if (!is_array($createdIds)) {
+            $createdIds = [];
+        }
+        if (!is_array($errors)) {
+            $errors = [];
         }
 
-        $sheet->getColumnDimension('A')->setAutoSize(true);
-        $sheet->getColumnDimension('B')->setAutoSize(true);
-        $sheet->getColumnDimension('C')->setAutoSize(true);
+        // Убираем системные ошибки из рядовых
+        unset($errors['__exception__']);
+
+        // === Заголовки ===
+        $col = 1;
+        $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . '1', 'ID');
+        $col++;
+
+        foreach ($columns as $column) {
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . '1', $column['name']);
+            $col++;
+        }
+
+        $errorColIndex = $col;
+        $errorColLetter = Coordinate::stringFromColumnIndex($errorColIndex);
+        $sheet->setCellValue($errorColLetter . '1', 'Ошибки');
+
+        $headerRange = 'A1:' . $errorColLetter . '1';
+        self::applyHeaderStyle($sheet, $headerRange);
+
+        // === Данные ===
+        $rowNum = 2;
+        $allRowsIndexed = array_values($allRows);
+
+        foreach ($allRowsIndexed as $rowIndex => $row) {
+            $col = 1;
+
+            // Колонка ID
+            $entityId = $createdIds[$rowIndex] ?? null;
+            $idCellAddr = Coordinate::stringFromColumnIndex($col) . $rowNum;
+            if ($entityId) {
+                $sheet->setCellValue($idCellAddr, $entityId);
+            }
+            $col++;
+
+            // Колонки данных
+            foreach ($columns as $column) {
+                $cellAddr = Coordinate::stringFromColumnIndex($col) . $rowNum;
+                $value = $row['data'][$column['id']] ?? '';
+                $sheet->setCellValue($cellAddr, $value);
+                $col++;
+            }
+
+            // Колонка ошибок
+            $errorMessages = [];
+            if (isset($errors[$rowIndex]) && !empty($errors[$rowIndex])) {
+                foreach ($errors[$rowIndex] as $error) {
+                    $errorMessages[] = self::formatErrorMessage($error);
+                }
+            }
+
+            $errorCellAddr = $errorColLetter . $rowNum;
+            $sheet->setCellValue($errorCellAddr, implode('; ', $errorMessages));
+
+            // Стили строки
+            $rowRange = 'A' . $rowNum . ':' . $errorColLetter . $rowNum;
+            if (!empty($errorMessages)) {
+                self::applyErrorRowStyle($sheet, $rowRange);
+            } else {
+                self::applySuccessRowStyle($sheet, $rowRange);
+            }
+
+            $rowNum++;
+        }
+
+        // Автоширина колонок
+        for ($colIndex = 1; $colIndex <= $errorColIndex; $colIndex++) {
+            $colLetter = Coordinate::stringFromColumnIndex($colIndex);
+            $sheet->getColumnDimension($colLetter)->setAutoSize(true);
+        }
     }
 
     /**
-     * Получает названия сущностей по их ID
-     *
-     * @param array $ids ID сущностей
-     * @param string $entityType Тип сущности (company, contact)
-     *
-     * @return array<int, string> ID => название
+     * Форматирует сообщение об ошибке
      */
-    private static function getEntityTitles(array $ids, string $entityType): array
+    private static function formatErrorMessage($error): string
     {
-        if (empty($ids)) {
-            return [];
+        if ($error instanceof \Rwb\Massops\Import\ImportError) {
+            return $error->message;
         }
 
-        Loader::requireModule('crm');
-
-        $titles = [];
-
-        switch ($entityType) {
-            case 'company':
-                $rsCompanies = \CCrmCompany::getListEx(
-                    [],
-                    ['@ID' => $ids, 'CHECK_PERMISSIONS' => 'N'],
-                    false,
-                    false,
-                    ['ID', 'TITLE']
-                );
-                while ($company = $rsCompanies->fetch()) {
-                    $titles[(int)$company['ID']] = $company['TITLE'] ?? '';
-                }
-                break;
-
-            case 'contact':
-                $rsContacts = \CCrmContact::getListEx(
-                    [],
-                    ['@ID' => $ids, 'CHECK_PERMISSIONS' => 'N'],
-                    false,
-                    false,
-                    ['ID', 'NAME', 'LAST_NAME']
-                );
-                while ($contact = $rsContacts->fetch()) {
-                    $fullName = trim(($contact['LAST_NAME'] ?? '') . ' ' . ($contact['NAME'] ?? ''));
-                    $titles[(int)$contact['ID']] = $fullName ?: '—';
-                }
-                break;
+        if (!is_array($error)) {
+            return (string) $error;
         }
 
-        return $titles;
-    }
+        $code = $error['code'] ?? '';
+        $context = $error['context'] ?? [];
 
-    /**
-     * Заполняет лист с ошибками
-     */
-    private static function fillErrorsSheet(Worksheet $sheet, array $errors): void
-    {
-        $sheet->setCellValue('A1', 'Строка');
-        $sheet->setCellValue('B1', 'Ошибка');
-
-        self::applyHeaderStyle($sheet, 'A1:B1');
-
-        ksort($errors, SORT_NUMERIC);
-
-        $row = 2;
-        foreach ($errors as $rowIndex => $rowErrors) {
-            foreach ($rowErrors as $error) {
-                $sheet->setCellValue('A' . $row, $rowIndex + 1);
-                $message = $error instanceof \Rwb\Massops\Import\ImportError
-                    ? $error->message
-                    : ($error['message'] ?? (string) $error);
-                $sheet->setCellValue('B' . $row, $message);
-                $row++;
+        if ($code === 'DUPLICATE_IN_FILE') {
+            $inn = $context['inn'] ?? '';
+            $duplicateRows = $context['duplicateRows'] ?? [];
+            if (!empty($duplicateRows)) {
+                $rowsStr = implode(', ', $duplicateRows);
+                return $inn
+                    ? "Дубликат ИНН \"{$inn}\": совпадает со строками {$rowsStr}"
+                    : "Дубликат ИНН: совпадает со строками {$rowsStr}";
             }
         }
 
-        $sheet->getColumnDimension('A')->setAutoSize(true);
-        $sheet->getColumnDimension('B')->setWidth(80);
+        if ($code === 'DUPLICATE_IN_CRM') {
+            $companyId = $context['existingCompanyId'] ?? '';
+            $inn = $context['inn'] ?? '';
+            if ($companyId) {
+                return $inn
+                    ? "Компания с ИНН \"{$inn}\" уже существует в CRM (ID: {$companyId})"
+                    : "Компания с таким ИНН уже существует в CRM (ID: {$companyId})";
+            }
+        }
+
+        return $error['message'] ?? (string) $error;
     }
 
     /**
@@ -255,6 +282,32 @@ class StatsReportExporter
             ],
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
+            ],
+        ]);
+    }
+
+    /**
+     * Стиль строки с ошибкой (красный)
+     */
+    private static function applyErrorRowStyle(Worksheet $sheet, string $range): void
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['argb' => 'FFFFC7CE'],
+            ],
+        ]);
+    }
+
+    /**
+     * Стиль успешной строки (зелёный)
+     */
+    private static function applySuccessRowStyle(Worksheet $sheet, string $range): void
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['argb' => 'FFD1FAE5'],
             ],
         ]);
     }

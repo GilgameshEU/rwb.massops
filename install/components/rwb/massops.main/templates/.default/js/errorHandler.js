@@ -36,7 +36,7 @@
          * @param {HTMLElement} container Контейнер
          * @param {boolean} isDryRun Флаг dry run
          */
-        showImportErrors: function (allErrors, errorsByRow, successCount, container, isDryRun) {
+        showImportErrors: function (allErrors, errorsByRow, successCount, container, isDryRun, jobId) {
             var self = this;
             isDryRun = isDryRun || false;
 
@@ -92,6 +92,17 @@
                 }
             }
 
+            if (!isDryRun && jobId) {
+                var downloadResultBtn = BX.create('button', {
+                    props: {className: 'ui-btn ui-btn-light ui-btn-xs rwb-result-download'},
+                    text: 'Скачать отчёт с результатами'
+                });
+                downloadResultBtn.onclick = function () {
+                    self.downloadStatsReport(jobId);
+                };
+                block.appendChild(downloadResultBtn);
+            }
+
             container.appendChild(block);
             block.scrollIntoView({behavior: 'smooth', block: 'nearest'});
         },
@@ -118,6 +129,34 @@
             errorsInput.name = 'errors';
             errorsInput.value = JSON.stringify(errorsByRow);
             form.appendChild(errorsInput);
+
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+        },
+
+        /**
+         * Скачивает XLSX-отчёт с результатами импорта
+         *
+         * @param {number} jobId ID задачи импорта
+         */
+        downloadStatsReport: function (jobId) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/bitrix/services/main/ajax.php?c=rwb:massops.main&action=downloadStatsReport&mode=class';
+            form.style.display = 'none';
+
+            var jobInput = document.createElement('input');
+            jobInput.type = 'hidden';
+            jobInput.name = 'jobId';
+            jobInput.value = jobId;
+            form.appendChild(jobInput);
+
+            var sessidInput = document.createElement('input');
+            sessidInput.type = 'hidden';
+            sessidInput.name = 'sessid';
+            sessidInput.value = BX.bitrix_sessid();
+            form.appendChild(sessidInput);
 
             document.body.appendChild(form);
             form.submit();
