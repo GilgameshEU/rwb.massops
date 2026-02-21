@@ -31,7 +31,7 @@ class StatsReportExporter
     {
         $spreadsheet = new Spreadsheet();
 
-        $options = !empty($job['IMPORT_OPTIONS']) ? unserialize($job['IMPORT_OPTIONS']) : [];
+        $options = !empty($job['IMPORT_OPTIONS']) ? (json_decode($job['IMPORT_OPTIONS'], true) ?? []) : [];
         $columns = $options['columns'] ?? [];
 
         $summarySheet = $spreadsheet->getActiveSheet();
@@ -98,9 +98,9 @@ class StatsReportExporter
      */
     private static function fillResultsSheet(Worksheet $sheet, array $job, array $columns): void
     {
-        $allRows = !empty($job['IMPORT_DATA']) ? unserialize($job['IMPORT_DATA']) : [];
-        $createdIds = !empty($job['CREATED_IDS']) ? unserialize($job['CREATED_IDS']) : [];
-        $errors = !empty($job['ERRORS_DATA']) ? unserialize($job['ERRORS_DATA']) : [];
+        $allRows = !empty($job['IMPORT_DATA']) ? (json_decode($job['IMPORT_DATA'], true) ?? []) : [];
+        $createdIds = !empty($job['CREATED_IDS']) ? (json_decode($job['CREATED_IDS'], true) ?? []) : [];
+        $errors = !empty($job['ERRORS_DATA']) ? (json_decode($job['ERRORS_DATA'], true) ?? []) : [];
 
         if (!is_array($allRows)) {
             $allRows = [];

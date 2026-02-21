@@ -171,8 +171,8 @@
          */
         buildGroupedErrors: function (errors) {
             var validationErrors = {};   // code -> {message, rows: []}
-            var fileDuplicates = {};     // inn -> [rowNumbers]
-            var crmDuplicates = [];      // [{row, companyId}]
+            var fileDuplicates = {};     // value -> [rowNumbers]
+            var crmDuplicates = [];      // [{row, entityId, message}]
 
             errors.forEach(function (error) {
                 if (!error) return;
@@ -182,18 +182,20 @@
                 var row = error.row;
                 var context = error.context || {};
 
-                if (code === 'DUPLICATE_IN_FILE' && context.inn) {
-                    var inn = String(context.inn);
-                    if (!fileDuplicates[inn]) {
-                        fileDuplicates[inn] = [];
+                if (code === 'DUPLICATE_IN_FILE') {
+                    var dupKey = String(context.inn || context.value || row);
+                    if (!fileDuplicates[dupKey]) {
+                        fileDuplicates[dupKey] = [];
                     }
-                    if (row && fileDuplicates[inn].indexOf(row) === -1) {
-                        fileDuplicates[inn].push(row);
+                    if (row && fileDuplicates[dupKey].indexOf(row) === -1) {
+                        fileDuplicates[dupKey].push(row);
                     }
-                } else if (code === 'DUPLICATE_IN_CRM' && context.existingCompanyId) {
+                } else if (code === 'DUPLICATE_IN_CRM') {
+                    var existingId = context.existingCompanyId || context.existingContactId || null;
                     crmDuplicates.push({
                         row: row,
-                        companyId: context.existingCompanyId
+                        entityId: existingId,
+                        message: error.message || ''
                     });
                 } else {
                     var key = code || error.message || 'UNKNOWN';
@@ -256,17 +258,17 @@
                 var fileSection = BX.create('div', {props: {className: 'rwb-error-section'}});
                 var fileTitle = BX.create('div', {
                     props: {className: 'rwb-error-section-title'},
-                    text: 'Дубликаты ИНН внутри файла:'
+                    text: 'Дубликаты внутри файла:'
                 });
                 fileSection.appendChild(fileTitle);
 
                 var fileList = BX.create('ul', {props: {className: 'rwb-result-list'}});
-                fileInnKeys.forEach(function (inn) {
-                    var rows = grouped.fileDuplicates[inn].sort(function (a, b) {
+                fileInnKeys.forEach(function (dupKey) {
+                    var rows = grouped.fileDuplicates[dupKey].sort(function (a, b) {
                         return a - b;
                     });
                     var li = BX.create('li');
-                    li.textContent = 'ИНН "' + inn + '" — строки: ' + rows.join(', ');
+                    li.textContent = '"' + dupKey + '" — строки: ' + rows.join(', ');
                     fileList.appendChild(li);
                 });
                 fileSection.appendChild(fileList);
@@ -277,7 +279,7 @@
                 var crmSection = BX.create('div', {props: {className: 'rwb-error-section'}});
                 var crmTitle = BX.create('div', {
                     props: {className: 'rwb-error-section-title'},
-                    text: 'Дубликаты ИНН в CRM:'
+                    text: 'Дубликаты в CRM:'
                 });
                 crmSection.appendChild(crmTitle);
 
@@ -288,7 +290,10 @@
                     })
                     .forEach(function (dup) {
                         var li = BX.create('li');
-                        li.textContent = 'Строка ' + dup.row + ': компания уже существует (ID: ' + dup.companyId + ')';
+                        var dupText = dup.message
+                            ? 'Строка ' + dup.row + ': ' + dup.message
+                            : 'Строка ' + dup.row + ': запись уже существует' + (dup.entityId ? ' (ID: ' + dup.entityId + ')' : '');
+                        li.textContent = dupText;
                         crmList.appendChild(li);
                     });
                 crmSection.appendChild(crmList);

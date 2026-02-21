@@ -2,10 +2,8 @@
 
 namespace Rwb\Massops\Import;
 
-use Bitrix\Main\ArgumentException;
-use Bitrix\Main\InvalidOperationException;
 use Bitrix\Main\Loader;
-use Bitrix\Main\LoaderException;
+use Rwb\Massops\Import\ImportErrorCode;
 use Rwb\Massops\Repository\CrmRepository;
 use Rwb\Massops\Service\DuplicateChecker;
 use Rwb\Massops\Support\UserFieldHelper;
@@ -13,10 +11,11 @@ use Rwb\Massops\Support\UserFieldHelper;
 /**
  * Сервис импорта компаний
  *
- * Расширяет базовый ImportService:
- * - проверка дубликатов по ИНН внутри файла
- * - проверка дубликатов по ИНН в CRM
- * - валидация обязательности ИНН
+ * Расширяет базовый ImportService через hook-методы:
+ * - beforeProcessRows() — проверка дубликатов по ИНН внутри файла
+ * - beforeBatchSave()   — проверка дубликатов по ИНН в CRM
+ * - afterSave()         — привязка источника сквозной аналитики
+ * - validateRow()       — валидация обязательности ИНН
  */
 class CompanyImportService extends ImportService
 {
@@ -39,196 +38,16 @@ class CompanyImportService extends ImportService
     }
 
     /**
-     * Обрабатывает строки импорта с проверкой дублей
-     *
-     * Порядок проверок:
-     * 1. Дубли внутри файла (по ИНН)
-     * 2. Базовая валидация строки
-     * 3. Дубли в CRM (по ИНН)
-     * 4. Сохранение в CRM
-     *
-     * @throws LoaderException|ArgumentException|InvalidOperationException
+     * Hook: проверка дублей внутри загруженного файла (по ИНН)
      */
-    protected function processRows(array $rows, ImportMode $mode, array $options = []): array
+    protected function beforeProcessRows(array $rows, array $fieldCodes, array $options): array
     {
-        $fieldCodes = $this->resolveFieldCodes($options['columns'] ?? []);
-        $fieldTypes = $this->repository->getFieldTypeMap();
-        $multipleFields = $this->repository->getMultipleFieldCodes();
-        $enumMappings = $this->repository->getEnumMappings();
-        $ufSettings = $this->repository->getUfFieldsSettings();
-        $extractor = new ErrorFieldExtractor($this->repository->getFieldList());
         $innFieldCode = $this->getInnFieldCode();
-
-        $success = 0;
-        $errors = [];
-        $items = [];
-
-        $dryRun = ($mode === ImportMode::DryRun);
-
-        $fileDuplicateErrors = [];
-        if ($innFieldCode) {
-            $fileDuplicateErrors = $this->checkFileInternalDuplicates($rows, $fieldCodes, $innFieldCode);
-            foreach ($fileDuplicateErrors as $rowIndex => $error) {
-                $errors[$rowIndex][] = $error;
-            }
+        if (!$innFieldCode) {
+            return [];
         }
 
-        $normalizedRows = [];
-        $validRowIndexes = [];
-
-        foreach ($rows as $rowIndex => $row) {
-            if (isset($fileDuplicateErrors[$rowIndex])) {
-                continue;
-            }
-
-            $normalized = $this->normalizer->normalize(
-                array_values($row['data']),
-                $fieldCodes,
-                $fieldTypes,
-                $multipleFields,
-                $enumMappings
-            );
-
-            $fields = $normalized->fields;
-            $uf = $normalized->uf;
-            $fm = $normalized->fm;
-
-            $userErrors = $this->resolveUserFields($fields, $uf, $fieldTypes);
-            $iblockErrors = $this->resolveIblockFields($uf, $fieldTypes, $ufSettings);
-            $crmRefErrors = $this->resolveCrmEntityFields($fields, $fieldTypes);
-
-            $this->applyImportOptions($uf, $options);
-
-            $normalizedRows[$rowIndex] = [
-                'fields' => $fields,
-                'uf' => $uf,
-                'fm' => $fm,
-                'normalized' => $normalized,
-            ];
-
-            $hasErrors = false;
-
-            $resolutionErrors = array_merge($userErrors, $iblockErrors, $crmRefErrors);
-            if (!empty($resolutionErrors)) {
-                foreach ($resolutionErrors as $error) {
-                    $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
-                }
-                $hasErrors = true;
-            }
-
-            if (!empty($normalized->errors)) {
-                foreach ($normalized->errors as $error) {
-                    $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
-                }
-                $hasErrors = true;
-            }
-
-            $validation = $this->validateRow($fields, $uf, $fm);
-            if (!$validation->isValid()) {
-                foreach ($validation->getErrors() as $error) {
-                    $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
-                }
-                $hasErrors = true;
-            }
-
-            if (!$hasErrors) {
-                $validRowIndexes[] = $rowIndex;
-            }
-        }
-
-        $crmDuplicateErrors = [];
-        if ($innFieldCode && !empty($validRowIndexes)) {
-            $crmDuplicateErrors = $this->checkCrmDuplicates(
-                $normalizedRows,
-                $innFieldCode,
-                $validRowIndexes
-            );
-            foreach ($crmDuplicateErrors as $rowIndex => $error) {
-                $errors[$rowIndex][] = $error;
-            }
-        }
-
-        foreach ($validRowIndexes as $rowIndex) {
-            if (isset($crmDuplicateErrors[$rowIndex])) {
-                continue;
-            }
-
-            $data = $normalizedRows[$rowIndex];
-
-            $result = $this->repository->add(
-                $data['fields'],
-                $data['uf'],
-                $data['fm'],
-                $dryRun
-            );
-
-            if (!$result->isSuccess()) {
-                foreach ($result->getErrors() as $error) {
-                    $errors[$rowIndex][] = new ImportError(
-                        type: 'validation',
-                        code: 'INVALID',
-                        message: $error->getMessage(),
-                        row: $rowIndex + 1,
-                        field: $extractor->extractFieldCode($error)
-                    );
-                }
-                continue;
-            }
-
-            $entityId = !$dryRun && method_exists($result, 'getId')
-                ? $result->getId()
-                : null;
-
-            if ($entityId && !$dryRun) {
-                $this->assignTrackingSource($entityId);
-            }
-
-            $success++;
-            $items[$rowIndex] = [
-                'row' => $rowIndex + 1,
-                'data' => $data['fields'],
-                'entityId' => $entityId,
-            ];
-        }
-
-        return [
-            'success' => $success,
-            'errors' => $errors,
-            'items' => $items,
-        ];
-    }
-
-    /**
-     * Валидация строки компании
-     *
-     * Проверяет обязательность ИНН
-     */
-    protected function validateRow(array $fields, array $uf, array $fm): ValidationResult
-    {
-        $result = new ValidationResult();
-        $innFieldCode = $this->getInnFieldCode();
-
-        if ($innFieldCode && empty($uf[$innFieldCode])) {
-            $result->addError(
-                new ImportError(
-                    type: 'field',
-                    code: 'REQUIRED',
-                    message: 'ИНН обязателен для заполнения',
-                    field: $innFieldCode
-                )
-            );
-        }
-
-        return $result;
-    }
-
-    /**
-     * Проверяет дубли внутри файла
-     */
-    private function checkFileInternalDuplicates(array $rows, array $fieldCodes, string $innFieldCode): array
-    {
         $preparedRows = [];
-
         foreach ($rows as $rowIndex => $row) {
             $normalized = $this->normalizer->normalize(
                 array_values($row['data']),
@@ -241,12 +60,16 @@ class CompanyImportService extends ImportService
     }
 
     /**
-     * Проверяет дубли в CRM
+     * Hook: проверка дублей в CRM (по ИНН)
      */
-    private function checkCrmDuplicates(array $normalizedRows, string $innFieldCode, array $validRowIndexes): array
+    protected function beforeBatchSave(array $normalizedRows, array $validRowIndexes, array $options): array
     {
-        $preparedRows = [];
+        $innFieldCode = $this->getInnFieldCode();
+        if (!$innFieldCode || empty($validRowIndexes)) {
+            return [];
+        }
 
+        $preparedRows = [];
         foreach ($validRowIndexes as $rowIndex) {
             if (isset($normalizedRows[$rowIndex])) {
                 $preparedRows[$rowIndex] = ['uf' => $normalizedRows[$rowIndex]['uf']];
@@ -260,6 +83,36 @@ class CompanyImportService extends ImportService
             $innFieldCode,
             $excludeIndexes
         );
+    }
+
+    /**
+     * Hook: привязка источника сквозной аналитики к созданной компании
+     */
+    protected function afterSave(int $rowIndex, int $entityId, array $fields): void
+    {
+        $this->assignTrackingSource($entityId);
+    }
+
+    /**
+     * Валидация строки компании — проверяет обязательность ИНН
+     */
+    protected function validateRow(array $fields, array $uf, array $fm): ValidationResult
+    {
+        $result = new ValidationResult();
+        $innFieldCode = $this->getInnFieldCode();
+
+        if ($innFieldCode && empty($uf[$innFieldCode])) {
+            $result->addError(
+                new ImportError(
+                    type: 'field',
+                    code: ImportErrorCode::Required->value,
+                    message: 'ИНН обязателен для заполнения',
+                    field: $innFieldCode
+                )
+            );
+        }
+
+        return $result;
     }
 
     /**

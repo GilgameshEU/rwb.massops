@@ -167,7 +167,10 @@
                 }
 
                 if (this.importBtn) {
-                    this.importBtn.textContent = 'Импортировать компании (' + readyCount + ' шт.)';
+                    var entityType = this.getEntityType();
+                    var entityConfig = (BX.RwbMassops.config.entityTypes || {})[entityType] || {};
+                    var entityTitle = entityConfig.title || 'записи';
+                    this.importBtn.textContent = 'Импортировать ' + entityTitle + ' (' + readyCount + ' шт.)';
                     this.importBtn.disabled = false;
                 }
             } else {
@@ -201,7 +204,10 @@
                 completeActions.style.display = '';
             }
             if (infoEl) {
-                infoEl.innerHTML = 'Добавлено компаний: <strong>' + (result.successCount || 0) + '</strong>';
+                var entityTypeComplete = this.getEntityType();
+                var entityConfigComplete = (BX.RwbMassops.config.entityTypes || {})[entityTypeComplete] || {};
+                var entityTitleComplete = entityConfigComplete.title || 'записей';
+                infoEl.innerHTML = 'Добавлено ' + entityTitleComplete + ': <strong>' + (result.successCount || 0) + '</strong>';
             }
         },
 

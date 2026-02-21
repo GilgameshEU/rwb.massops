@@ -60,6 +60,11 @@ final class CrmRepository
      */
     private ?array $enumMappingsCache = null;
 
+    /**
+     * Кэш данных UF-полей (per-instance)
+     */
+    private ?array $ufFieldsInfoCache = null;
+
     public function __construct(
         private readonly EntityType $entityType
     ) {
@@ -421,12 +426,18 @@ final class CrmRepository
     /**
      * Получает информацию о пользовательских полях из CUserTypeEntity
      *
+     * Данные кешируются в рамках жизни объекта.
+     *
      * @return array<string, array>
      */
     private function getUfFieldsInfo(): array
     {
+        if ($this->ufFieldsInfoCache !== null) {
+            return $this->ufFieldsInfoCache;
+        }
+
         $entityId = 'CRM_' . strtoupper($this->entityType->value);
-        $result = [];
+        $this->ufFieldsInfoCache = [];
 
         $rsFields = \CUserTypeEntity::getList(
             [],
@@ -434,10 +445,10 @@ final class CrmRepository
         );
 
         while ($field = $rsFields->fetch()) {
-            $result[$field['FIELD_NAME']] = $field;
+            $this->ufFieldsInfoCache[$field['FIELD_NAME']] = $field;
         }
 
-        return $result;
+        return $this->ufFieldsInfoCache;
     }
 
     /**

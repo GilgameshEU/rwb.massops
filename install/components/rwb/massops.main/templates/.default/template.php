@@ -26,6 +26,8 @@ Asset::getInstance()->AddJS($this->GetFolder() . '/js/main.js');
 $entityTypes = $arResult['ENTITY_TYPES'] ?? [];
 $currentEntityType = $arResult['CURRENT_ENTITY_TYPE'];
 $hasData = $arResult['HAS_DATA'] ?? false;
+$currentEntityConfig = $currentEntityType ? ($entityTypes[$currentEntityType] ?? []) : [];
+$currentListUrl = $currentEntityConfig['listUrl'] ?? '';
 
 $svgIcons = [
     'building' => '<svg viewBox="0 0 24 24"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg>',
@@ -155,13 +157,15 @@ $svgIcons = [
                             </div>
 
                             <span id="rwb-import-nothing" class="rwb-preview__nothing" style="display: none;">
-                                Нет компаний для добавления
+                                Нет записей для добавления
                             </span>
 
                             <div id="rwb-import-complete-actions" style="display: none;">
-                                <a href="/crm/company/list/" class="ui-btn ui-btn-primary ui-btn-sm">
-                                    Перейти к компаниям
+                                <?php if ($currentListUrl): ?>
+                                <a href="<?= htmlspecialchars($currentListUrl) ?>" class="ui-btn ui-btn-primary ui-btn-sm">
+                                    Перейти к <?= htmlspecialchars($currentEntityConfig['title'] ?? 'списку') ?>
                                 </a>
+                                <?php endif; ?>
                             </div>
                         </div>
 
@@ -185,6 +189,8 @@ $svgIcons = [
                                 'COLUMNS' => $arResult['GRID_COLUMNS'],
                                 'ROWS' => $arResult['GRID_ROWS'],
                                 'SHOW_ROW_CHECKBOXES' => false,
+                                'SHOW_ACTION_PANEL' => false,
+                                'SHOW_SELECTED_COUNTER' => false,
                                 'AJAX_MODE' => 'Y',
                                 'AJAX_OPTION_JUMP' => 'N',
                                 'AJAX_OPTION_HISTORY' => 'N',

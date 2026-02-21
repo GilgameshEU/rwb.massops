@@ -38,10 +38,10 @@ class ImportJobService
             'ENTITY_TYPE' => $entityType,
             'STATUS' => ImportJobStatus::Pending->value,
             'TOTAL_ROWS' => count($rows),
-            'ERRORS_DATA' => serialize([]),
-            'CREATED_IDS' => serialize([]),
-            'IMPORT_DATA' => serialize($rows),
-            'IMPORT_OPTIONS' => serialize($options),
+            'ERRORS_DATA' => json_encode([]),
+            'CREATED_IDS' => json_encode([]),
+            'IMPORT_DATA' => json_encode($rows),
+            'IMPORT_OPTIONS' => json_encode($options),
         ]);
 
         if (!$result->isSuccess()) {
@@ -167,7 +167,7 @@ class ImportJobService
                 'successCount' => (int) $job['SUCCESS_COUNT'],
                 'errorCount' => (int) $job['ERROR_COUNT'],
                 'createdIds' => !empty($job['CREATED_IDS'])
-                    ? unserialize($job['CREATED_IDS'])
+                    ? (json_decode($job['CREATED_IDS'], true) ?? [])
                     : [],
                 'createdAt' => $job['CREATED_AT'] ? $job['CREATED_AT']->toString() : null,
                 'startedAt' => $job['STARTED_AT'] ? $job['STARTED_AT']->toString() : null,
@@ -192,7 +192,7 @@ class ImportJobService
     private function attachErrorsToResponse(array &$response, array $job): void
     {
         try {
-            $errors = unserialize($job['ERRORS_DATA']);
+            $errors = json_decode($job['ERRORS_DATA'], true);
 
             if (!is_array($errors)) {
                 return;
@@ -206,8 +206,8 @@ class ImportJobService
 
                 if (is_array($exceptionErrors)) {
                     foreach ($exceptionErrors as $err) {
-                        if (is_object($err) && method_exists($err, 'toArray')) {
-                            $response['errorMessage'] = $err->message ?? $err->toArray()['message'] ?? null;
+                        if (is_array($err) && isset($err['message'])) {
+                            $response['errorMessage'] = $err['message'];
                             break;
                         }
                     }
@@ -218,15 +218,7 @@ class ImportJobService
                 if (!is_array($rowErrors)) {
                     continue;
                 }
-                $gridErrors[$rowIndex] = array_map(
-                    function ($error) {
-                        if (is_object($error) && method_exists($error, 'toArray')) {
-                            return $error->toArray();
-                        }
-                        return is_array($error) ? $error : ['message' => (string) $error];
-                    },
-                    $rowErrors
-                );
+                $gridErrors[$rowIndex] = $rowErrors;
             }
 
             $response['errors'] = $gridErrors;

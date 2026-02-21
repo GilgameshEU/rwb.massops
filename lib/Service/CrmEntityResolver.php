@@ -2,6 +2,7 @@
 
 namespace Rwb\Massops\Service;
 
+use Bitrix\Crm\Service\Container;
 use Bitrix\Main\Loader;
 
 /**
@@ -10,6 +11,9 @@ use Bitrix\Main\Loader;
  * Валидирует что указанный ID сущности (компания, контакт, сделка и т.д.)
  * действительно существует в CRM.
  *
+ * Использует современный Bitrix CRM Service Container / Factory
+ * вместо устаревшего C*-API.
+ *
  * Результаты кэшируются на время жизни объекта.
  */
 class CrmEntityResolver
@@ -17,18 +21,26 @@ class CrmEntityResolver
     /** @var array<string, array<int, bool>> */
     private array $cache = [];
 
-    private const TYPE_CLASS_MAP = [
-        'crm_company' => 'CCrmCompany',
-        'crm_contact' => 'CCrmContact',
-        'crm_deal' => 'CCrmDeal',
-        'crm_lead' => 'CCrmLead',
+    /**
+     * Маппинг типа поля → числовой код типа сущности CRM.
+     *
+     * Используем числовые литералы вместо \CCrmOwnerType::X,
+     * чтобы избежать ошибки "Class not found" до загрузки модуля crm.
+     * Значения стабильны и не меняются между версиями Bitrix:
+     *   Lead = 1, Deal = 2, Contact = 3, Company = 4
+     */
+    private const TYPE_OWNER_MAP = [
+        'crm_company' => 4, // CCrmOwnerType::Company
+        'crm_contact' => 3, // CCrmOwnerType::Contact
+        'crm_deal'    => 2, // CCrmOwnerType::Deal
+        'crm_lead'    => 1, // CCrmOwnerType::Lead
     ];
 
     private const TYPE_LABELS = [
         'crm_company' => 'Компания',
         'crm_contact' => 'Контакт',
-        'crm_deal' => 'Сделка',
-        'crm_lead' => 'Лид',
+        'crm_deal'    => 'Сделка',
+        'crm_lead'    => 'Лид',
     ];
 
     /**
@@ -46,13 +58,14 @@ class CrmEntityResolver
 
         Loader::requireModule('crm');
 
-        $className = self::TYPE_CLASS_MAP[$fieldType] ?? null;
-        if ($className === null) {
+        $ownerTypeId = self::TYPE_OWNER_MAP[$fieldType] ?? null;
+        if ($ownerTypeId === null) {
+            // Неизвестный тип — пропускаем проверку
             return true;
         }
 
-        $entity = $className::getByID($id);
-        $exists = ($entity !== false && !empty($entity));
+        $factory = Container::getInstance()->getFactory($ownerTypeId);
+        $exists = ($factory !== null && $factory->getItem($id) !== null);
 
         $this->cache[$fieldType][$id] = $exists;
 
@@ -72,6 +85,6 @@ class CrmEntityResolver
      */
     public function supportsType(string $fieldType): bool
     {
-        return isset(self::TYPE_CLASS_MAP[$fieldType]);
+        return isset(self::TYPE_OWNER_MAP[$fieldType]);
     }
 }

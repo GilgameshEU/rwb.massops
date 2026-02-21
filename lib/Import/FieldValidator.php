@@ -4,6 +4,7 @@ namespace Rwb\Massops\Import;
 
 use Bitrix\Main\LoaderException;
 use Rwb\Massops\Repository\CrmRepository;
+use Rwb\Massops\Import\ImportErrorCode;
 
 class FieldValidator
 {
@@ -46,7 +47,7 @@ class FieldValidator
         if (empty($rows)) {
             $errors[] = new ImportError(
                 type: 'file',
-                code: 'FILE_INVALID',
+                code: ImportErrorCode::FileInvalid->value,
                 message: 'Файл пустой'
             );
 
@@ -56,7 +57,7 @@ class FieldValidator
         if (count($rows) < 2) {
             $errors[] = new ImportError(
                 type: 'file',
-                code: 'FILE_INVALID',
+                code: ImportErrorCode::FileInvalid->value,
                 message: 'Файл содержит только шаблон без данных'
             );
         }
@@ -90,7 +91,7 @@ class FieldValidator
         if (empty(array_filter($header))) {
             $errors[] = new ImportError(
                 type: 'header',
-                code: 'INVALID',
+                code: ImportErrorCode::HeaderInvalid->value,
                 message: 'Шаблон не содержит ни одного поля'
             );
         }
@@ -129,7 +130,7 @@ class FieldValidator
         if (!empty($missing)) {
             $errors[] = new ImportError(
                 type: 'header',
-                code: 'NOT_FOUND',
+                code: ImportErrorCode::HeaderNotFound->value,
                 message: 'В CRM' . ($this->entityTitle ? ' (' . $this->entityTitle . ')' : '') . ' не найдены поля: ' . implode(', ', $missing),
                 context: ['missing_fields' => $missing]
             );

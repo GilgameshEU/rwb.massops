@@ -62,6 +62,12 @@ class ImportJobTable extends Entity\DataManager
             new Entity\TextField('IMPORT_OPTIONS', [
                 'nullable' => true,
             ]),
+            new Entity\IntegerField('RETRY_COUNT', [
+                'default_value' => 0,
+            ]),
+            new Entity\IntegerField('MAX_RETRIES', [
+                'default_value' => 3,
+            ]),
             new Entity\DatetimeField('CREATED_AT', [
                 'required' => true,
                 'default_value' => static fn() => new DateTime(),

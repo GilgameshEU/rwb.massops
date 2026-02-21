@@ -2,6 +2,8 @@
 
 namespace Rwb\Massops\Service;
 
+use Bitrix\Main\UserTable;
+
 /**
  * Сервис резолюции пользователей
  *
@@ -10,6 +12,7 @@ namespace Rwb\Massops\Service;
  * - "Имя Фамилия" / "Фамилия Имя" → поиск по базе
  *
  * Результаты кэшируются на время жизни объекта.
+ * Использует современный Bitrix ORM (UserTable) вместо Legacy CUser.
  */
 class UserResolver
 {
@@ -55,8 +58,13 @@ class UserResolver
             return $this->idCache[$id] ? $id : null;
         }
 
-        $user = \CUser::getByID($id)->fetch();
-        $exists = ($user !== false && ($user['ACTIVE'] ?? 'N') === 'Y');
+        $result = UserTable::getList([
+            'select' => ['ID', 'ACTIVE'],
+            'filter' => ['=ID' => $id],
+            'limit' => 1,
+        ])->fetch();
+
+        $exists = ($result !== false && ($result['ACTIVE'] ?? 'N') === 'Y');
         $this->idCache[$id] = $exists;
 
         return $exists ? $id : null;
@@ -94,23 +102,21 @@ class UserResolver
     }
 
     /**
-     * Поиск пользователя по имени и фамилии через Bitrix API
+     * Поиск пользователя по имени и фамилии через Bitrix ORM
      */
     private function findUserByNameParts(string $firstName, string $lastName): ?int
     {
-        $rsUsers = \CUser::getList(
-            'ID',
-            'ASC',
-            [
-                'NAME' => $firstName,
-                'LAST_NAME' => $lastName,
-                'ACTIVE' => 'Y',
+        $result = UserTable::getList([
+            'select' => ['ID'],
+            'filter' => [
+                '=NAME' => $firstName,
+                '=LAST_NAME' => $lastName,
+                '=ACTIVE' => 'Y',
             ],
-            ['FIELDS' => ['ID']]
-        );
+            'order' => ['ID' => 'ASC'],
+            'limit' => 1,
+        ])->fetch();
 
-        $user = $rsUsers->fetch();
-
-        return $user ? (int) $user['ID'] : null;
+        return $result ? (int) $result['ID'] : null;
     }
 }

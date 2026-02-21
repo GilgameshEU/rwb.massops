@@ -88,21 +88,28 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             $allRows = GridDataConverter::sortRows($allRows, $sort['by'], $sort['order']);
         }
 
-        $pageSize = $this->getGridPageSize();
         $totalRows = count($allRows);
+        $minPageSize = min(self::GRID_ALLOWED_PAGE_SIZES);
 
-        $nav = new PageNavigation('rwb-grid-nav');
-        $nav->allowAllRecords(false);
-        $nav->setPageSize($pageSize);
-        $nav->setRecordCount($totalRows);
-        $nav->initFromUri();
+        if ($totalRows > $minPageSize) {
+            $pageSize = $this->getGridPageSize();
 
-        $offset = $nav->getOffset();
-        $pageRows = array_slice($allRows, $offset, $pageSize);
+            $nav = new PageNavigation('rwb-grid-nav');
+            $nav->allowAllRecords(false);
+            $nav->setPageSize($pageSize);
+            $nav->setRecordCount($totalRows);
+            $nav->initFromUri();
+
+            $offset = $nav->getOffset();
+            $pageRows = array_slice($allRows, $offset, $pageSize);
+
+            $this->arResult['GRID_NAV'] = $nav;
+        } else {
+            $pageRows = $allRows;
+        }
 
         $this->arResult['GRID_ROWS'] = $pageRows;
         $this->arResult['GRID_SORT'] = $sort;
-        $this->arResult['GRID_NAV'] = $nav;
         $this->arResult['GRID_TOTAL_ROWS'] = $totalRows;
 
         $this->includeComponentTemplate();

@@ -2,219 +2,74 @@
 
 namespace Rwb\Massops\Service;
 
-use Bitrix\Main\Loader;
 use Rwb\Massops\Import\ImportError;
-use Rwb\Massops\Support\UserFieldHelper;
 
 /**
  * Сервис проверки дубликатов
  *
- * Проверяет дубликаты:
- * 1. Внутри загруженного файла
- * 2. В существующей базе CRM
+ * Делегирует логику поиска дублей стратегии (DuplicateStrategy).
+ * По умолчанию использует InnDuplicateStrategy.
+ *
+ * Позволяет подменить стратегию через конструктор для поддержки
+ * других типов сущностей (контакты по телефону/email и т.д.).
  */
 class DuplicateChecker
 {
-    /**
-     * XML_ID поля ИНН
-     */
-    private const INN_XML_ID = 'INN';
+    private DuplicateStrategy $strategy;
 
     /**
-     * Код поля ИНН (кэшируется)
+     * @param DuplicateStrategy|null $strategy Стратегия поиска дублей (по умолчанию — InnDuplicateStrategy)
      */
-    private ?string $innFieldCode = null;
+    public function __construct(?DuplicateStrategy $strategy = null)
+    {
+        $this->strategy = $strategy ?? new InnDuplicateStrategy();
+    }
 
     /**
      * Проверяет дубликаты внутри файла
      *
-     * @param array $rows Строки файла (после нормализации)
-     * @param string $innFieldCode Код поля ИНН
+     * @param array  $rows         Строки данных
+     * @param string $innFieldCode Код поля-идентификатора (ИНН для компаний)
      *
-     * @return array<int, ImportError> Ошибки по индексам строк
+     * @return array<int, ImportError>
      */
     public function checkFileInternalDuplicates(array $rows, string $innFieldCode): array
     {
-        $errors = [];
-        $innToRows = [];
-
-        foreach ($rows as $rowIndex => $row) {
-            $inn = $this->extractInn($row, $innFieldCode);
-
-            if (empty($inn)) {
-                continue;
-            }
-
-            $inn = $this->normalizeInn($inn);
-
-            if (!isset($innToRows[$inn])) {
-                $innToRows[$inn] = [];
-            }
-            $innToRows[$inn][] = $rowIndex;
-        }
-
-        foreach ($innToRows as $inn => $rowIndexes) {
-            if (count($rowIndexes) > 1) {
-                foreach ($rowIndexes as $rowIndex) {
-                    $duplicateRows = array_diff($rowIndexes, [$rowIndex]);
-                    $duplicateRowsHuman = array_map(fn($i) => $i + 1, $duplicateRows);
-
-                    $errors[$rowIndex] = new ImportError(
-                        type: 'duplicate',
-                        code: 'DUPLICATE_IN_FILE',
-                        message: 'Дубликат ИНН в файле (строки: ' . implode(', ', $duplicateRowsHuman) . ')',
-                        row: $rowIndex + 1,
-                        field: $innFieldCode,
-                        context: [
-                            'inn' => $inn,
-                            'duplicateRows' => $duplicateRowsHuman,
-                        ]
-                    );
-                }
-            }
-        }
-
-        return $errors;
+        return $this->strategy->checkFileInternalDuplicates(
+            $rows,
+            ['innFieldCode' => $innFieldCode]
+        );
     }
 
     /**
      * Проверяет дубликаты в CRM
      *
-     * @param array $rows Строки файла
-     * @param string $innFieldCode Код поля ИНН
-     * @param array $excludeRowIndexes Индексы строк для исключения (уже с ошибками)
+     * @param array $rows              Нормализованные строки
+     * @param string $innFieldCode     Код поля-идентификатора
+     * @param array $excludeRowIndexes (не используется, оставлен для обратной совместимости)
      *
-     * @return array<int, ImportError> Ошибки по индексам строк
+     * @return array<int, ImportError>
      */
     public function checkCrmDuplicates(array $rows, string $innFieldCode, array $excludeRowIndexes = []): array
     {
-        Loader::requireModule('crm');
+        $validRowIndexes = array_keys($rows);
 
-        $errors = [];
-
-        $innToRow = [];
-        foreach ($rows as $rowIndex => $row) {
-            if (in_array($rowIndex, $excludeRowIndexes, true)) {
-                continue;
-            }
-
-            $inn = $this->extractInn($row, $innFieldCode);
-            if (empty($inn)) {
-                continue;
-            }
-
-            $inn = $this->normalizeInn($inn);
-            $innToRow[$inn] = $rowIndex;
-        }
-
-        if (empty($innToRow)) {
-            return $errors;
-        }
-
-        $existingCompanies = $this->findCompaniesByInn(array_keys($innToRow), $innFieldCode);
-
-        foreach ($existingCompanies as $inn => $companyId) {
-            if (isset($innToRow[$inn])) {
-                $rowIndex = $innToRow[$inn];
-                $errors[$rowIndex] = new ImportError(
-                    type: 'duplicate',
-                    code: 'DUPLICATE_IN_CRM',
-                    message: 'Компания с таким ИНН уже существует в CRM (ID: ' . $companyId . ')',
-                    row: $rowIndex + 1,
-                    field: $innFieldCode,
-                    context: [
-                        'inn' => $inn,
-                        'existingCompanyId' => $companyId,
-                    ]
-                );
-            }
-        }
-
-        return $errors;
+        return $this->strategy->checkCrmDuplicates(
+            $rows,
+            $validRowIndexes,
+            ['innFieldCode' => $innFieldCode]
+        );
     }
 
     /**
-     * Возвращает код поля ИНН для компании
+     * Возвращает код поля ИНН (делегирует стратегии, если та его поддерживает)
      */
     public function getInnFieldCode(): ?string
     {
-        if ($this->innFieldCode === null) {
-            $this->innFieldCode = UserFieldHelper::getFieldCodeByXmlId('CRM_COMPANY', self::INN_XML_ID);
-        }
-
-        return $this->innFieldCode;
-    }
-
-    /**
-     * Извлекает ИНН из строки данных
-     */
-    private function extractInn(array $row, string $innFieldCode): ?string
-    {
-        if (isset($row['uf'][$innFieldCode])) {
-            return $row['uf'][$innFieldCode];
-        }
-
-        if (isset($row['data'])) {
-            foreach ($row['data'] as $key => $value) {
-                if ($key === $innFieldCode) {
-                    return $value;
-                }
-            }
-        }
-
-        if (isset($row[$innFieldCode])) {
-            return $row[$innFieldCode];
+        if ($this->strategy instanceof InnDuplicateStrategy) {
+            return $this->strategy->getInnFieldCode();
         }
 
         return null;
-    }
-
-    /**
-     * Нормализует ИНН (убирает пробелы, приводит к строке)
-     */
-    private function normalizeInn(string $inn): string
-    {
-        return trim(preg_replace('/\s+/', '', $inn));
-    }
-
-    /**
-     * Ищет компании по ИНН в CRM
-     *
-     * @param array $innList Список ИНН для поиска
-     * @param string $innFieldCode Код поля ИНН
-     *
-     * @return array<string, int> ИНН => ID компании
-     */
-    private function findCompaniesByInn(array $innList, string $innFieldCode): array
-    {
-        $result = [];
-
-        if (empty($innList)) {
-            return $result;
-        }
-
-        $filter = [
-            'CHECK_PERMISSIONS' => 'N',
-            $innFieldCode => $innList,
-        ];
-
-        $select = ['ID', $innFieldCode];
-
-        $rsCompanies = \CCrmCompany::getListEx(
-            [],
-            $filter,
-            false,
-            false,
-            $select
-        );
-
-        while ($company = $rsCompanies->fetch()) {
-            $inn = $this->normalizeInn($company[$innFieldCode] ?? '');
-            if (!empty($inn)) {
-                $result[$inn] = (int) $company['ID'];
-            }
-        }
-
-        return $result;
     }
 }

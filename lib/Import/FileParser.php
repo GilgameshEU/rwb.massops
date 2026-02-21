@@ -6,6 +6,7 @@ use Exception;
 use InvalidArgumentException;
 use RuntimeException;
 use Rwb\Massops\Import\Parser\XlsxParser;
+use Rwb\Massops\Import\ImportErrorCode;
 
 /**
  * Парсер файлов импорта
@@ -43,13 +44,13 @@ final class FileParser
         } catch (RuntimeException|InvalidArgumentException $e) {
             $errors[] = new ImportError(
                 type: 'file',
-                code: 'FILE_INVALID',
+                code: ImportErrorCode::FileInvalid->value,
                 message: $e->getMessage()
             );
         } catch (Exception $e) {
             $errors[] = new ImportError(
                 type: 'file',
-                code: 'FILE_INVALID',
+                code: ImportErrorCode::FileInvalid->value,
                 message: 'Ошибка при чтении файла: ' . $e->getMessage()
             );
         }

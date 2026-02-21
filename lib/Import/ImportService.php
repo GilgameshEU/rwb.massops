@@ -3,18 +3,15 @@
 namespace Rwb\Massops\Import;
 
 use Bitrix\Main\ArgumentException;
-use Bitrix\Main\Error;
 use Bitrix\Main\InvalidOperationException;
 use Bitrix\Main\LoaderException;
-use Exception;
-use InvalidArgumentException;
-use RuntimeException;
 use Bitrix\Crm\Field;
 use Rwb\Massops\Repository\CrmRepository;
 use Rwb\Massops\Service\CrmEntityResolver;
 use Rwb\Massops\Service\IblockResolver;
 use Rwb\Massops\Service\UserResolver;
 use Rwb\Massops\Support\UserFieldHelper;
+use Rwb\Massops\Import\ImportErrorCode;
 
 /**
  * Сервис импорта данных CRM
@@ -23,6 +20,11 @@ use Rwb\Massops\Support\UserFieldHelper;
  * - нормализация строк
  * - валидация
  * - сохранение через репозиторий
+ *
+ * Расширяется через hook-методы:
+ * - beforeProcessRows()  — предобработка (дубли в файле и т.д.)
+ * - beforeSave()         — проверки перед сохранением строки
+ * - afterSave()          — постобработка после успешного сохранения
  */
 class ImportService
 {
@@ -32,11 +34,14 @@ class ImportService
 
     public function __construct(
         protected readonly CrmRepository $repository,
-        protected readonly RowNormalizer $normalizer = new RowNormalizer()
+        protected readonly RowNormalizer $normalizer = new RowNormalizer(),
+        ?UserResolver $userResolver = null,
+        ?IblockResolver $iblockResolver = null,
+        ?CrmEntityResolver $crmEntityResolver = null,
     ) {
-        $this->userResolver = new UserResolver();
-        $this->iblockResolver = new IblockResolver();
-        $this->crmEntityResolver = new CrmEntityResolver();
+        $this->userResolver = $userResolver ?? new UserResolver();
+        $this->iblockResolver = $iblockResolver ?? new IblockResolver();
+        $this->crmEntityResolver = $crmEntityResolver ?? new CrmEntityResolver();
     }
 
     /**
@@ -89,7 +94,7 @@ class ImportService
      * @return array{success: int, errors: array, items: array}
      * @throws LoaderException|ArgumentException|InvalidOperationException
      */
-    protected function processRows(array $rows, ImportMode $mode, array $options = []): array
+    final protected function processRows(array $rows, ImportMode $mode, array $options = []): array
     {
         $fieldCodes = $this->resolveFieldCodes($options['columns'] ?? []);
         $fieldTypes = $this->repository->getFieldTypeMap();
@@ -107,7 +112,20 @@ class ImportService
 
         $dryRun = ($mode === ImportMode::DryRun);
 
+        // Hook: предобработка всего набора строк (например, поиск дублей в файле)
+        $preErrors = $this->beforeProcessRows($rows, $fieldCodes, $options);
+        foreach ($preErrors as $rowIndex => $error) {
+            $errors[$rowIndex][] = $error;
+        }
+
+        $normalizedRows = [];
+        $validRowIndexes = [];
+
         foreach ($rows as $rowIndex => $row) {
+            if (isset($preErrors[$rowIndex])) {
+                continue;
+            }
+
             $normalized = $this->normalizer->normalize(
                 array_values($row['data']),
                 $fieldCodes,
@@ -126,6 +144,8 @@ class ImportService
 
             $this->applyImportOptions($uf, $options);
 
+            $normalizedRows[$rowIndex] = compact('fields', 'uf', 'fm', 'normalized');
+
             $hasErrors = false;
 
             $resolutionErrors = array_merge($userErrors, $iblockErrors, $crmRefErrors);
@@ -138,34 +158,41 @@ class ImportService
 
             if (!empty($normalized->errors)) {
                 foreach ($normalized->errors as $error) {
-                    $errors[$rowIndex][] = $this->attachRowToError(
-                        $error,
-                        $rowIndex
-                    );
+                    $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
                 }
                 $hasErrors = true;
             }
 
             $validation = $this->validateRow($fields, $uf, $fm);
-
             if (!$validation->isValid()) {
                 foreach ($validation->getErrors() as $error) {
-                    $errors[$rowIndex][] = $this->attachRowToError(
-                        $error,
-                        $rowIndex
-                    );
+                    $errors[$rowIndex][] = $this->attachRowToError($error, $rowIndex);
                 }
                 $hasErrors = true;
             }
 
-            if ($hasErrors) {
+            if (!$hasErrors) {
+                $validRowIndexes[] = $rowIndex;
+            }
+        }
+
+        // Hook: проверки перед сохранением (например, дубли в CRM)
+        $savePreErrors = $this->beforeBatchSave($normalizedRows, $validRowIndexes, $options);
+        foreach ($savePreErrors as $rowIndex => $error) {
+            $errors[$rowIndex][] = $error;
+        }
+
+        foreach ($validRowIndexes as $rowIndex) {
+            if (isset($savePreErrors[$rowIndex])) {
                 continue;
             }
 
+            $data = $normalizedRows[$rowIndex];
+
             $result = $this->repository->add(
-                $fields,
-                $uf,
-                $fm,
+                $data['fields'],
+                $data['uf'],
+                $data['fm'],
                 $dryRun
             );
 
@@ -173,7 +200,7 @@ class ImportService
                 foreach ($result->getErrors() as $error) {
                     $errors[$rowIndex][] = new ImportError(
                         type: 'validation',
-                        code: 'INVALID',
+                        code: ImportErrorCode::Invalid->value,
                         message: $error->getMessage(),
                         row: $rowIndex + 1,
                         field: $extractor->extractFieldCode($error)
@@ -182,13 +209,19 @@ class ImportService
                 continue;
             }
 
+            $entityId = !$dryRun && method_exists($result, 'getId')
+                ? $result->getId()
+                : null;
+
+            if ($entityId && !$dryRun) {
+                $this->afterSave($rowIndex, $entityId, $data['fields']);
+            }
+
             $success++;
             $items[$rowIndex] = [
                 'row' => $rowIndex + 1,
-                'data' => $fields,
-                'entityId' => !$dryRun && method_exists($result, 'getId')
-                    ? $result->getId()
-                    : null,
+                'data' => $data['fields'],
+                'entityId' => $entityId,
             ];
         }
 
@@ -197,6 +230,55 @@ class ImportService
             'errors' => $errors,
             'items' => $items,
         ];
+    }
+
+    /**
+     * Hook: предобработка всего набора строк
+     *
+     * Вызывается до нормализации. Используется для проверок на уровне
+     * всего файла, например поиска внутренних дублей.
+     *
+     * @param array $rows       Исходные строки
+     * @param array $fieldCodes Коды полей (маппинг колонок)
+     * @param array $options    Опции импорта
+     *
+     * @return array<int, ImportError> Ошибки, индексированные по rowIndex
+     */
+    protected function beforeProcessRows(array $rows, array $fieldCodes, array $options): array
+    {
+        return [];
+    }
+
+    /**
+     * Hook: проверки перед сохранением пакета
+     *
+     * Вызывается после нормализации и базовой валидации.
+     * Используется для проверок, требующих нормализованных данных, —
+     * например поиска дублей в CRM.
+     *
+     * @param array $normalizedRows  Нормализованные строки [rowIndex => ['fields', 'uf', 'fm', 'normalized']]
+     * @param array $validRowIndexes Индексы строк, прошедших базовую валидацию
+     * @param array $options         Опции импорта
+     *
+     * @return array<int, ImportError> Ошибки, индексированные по rowIndex
+     */
+    protected function beforeBatchSave(array $normalizedRows, array $validRowIndexes, array $options): array
+    {
+        return [];
+    }
+
+    /**
+     * Hook: постобработка после успешного сохранения строки
+     *
+     * Вызывается после успешного сохранения каждой записи в режиме import.
+     * Используется, например, для привязки источника сквозной аналитики.
+     *
+     * @param int   $rowIndex Индекс строки
+     * @param int   $entityId ID созданной сущности
+     * @param array $fields   Поля сохранённой записи
+     */
+    protected function afterSave(int $rowIndex, int $entityId, array $fields): void
+    {
     }
 
     /**
@@ -275,7 +357,7 @@ class ImportService
             if ($userId === null) {
                 $errors[] = new ImportError(
                     type: 'field',
-                    code: 'USER_NOT_FOUND',
+                    code: ImportErrorCode::UserNotFound->value,
                     message: 'Пользователь не найден: ' . $value,
                     field: $code
                 );
@@ -300,7 +382,7 @@ class ImportService
                     if ($userId === null) {
                         $errors[] = new ImportError(
                             type: 'field',
-                            code: 'USER_NOT_FOUND',
+                            code: ImportErrorCode::UserNotFound->value,
                             message: 'Сотрудник не найден: ' . $v,
                             field: $code
                         );
@@ -314,7 +396,7 @@ class ImportService
                 if ($userId === null) {
                     $errors[] = new ImportError(
                         type: 'field',
-                        code: 'USER_NOT_FOUND',
+                        code: ImportErrorCode::UserNotFound->value,
                         message: 'Сотрудник не найден: ' . $value,
                         field: $code
                     );
@@ -366,7 +448,7 @@ class ImportService
                     if ($id === null) {
                         $errors[] = new ImportError(
                             type: 'field',
-                            code: 'IBLOCK_NOT_FOUND',
+                            code: ImportErrorCode::IblockNotFound->value,
                             message: "{$entityLabel} не найден: {$v}",
                             field: $code
                         );
@@ -383,7 +465,7 @@ class ImportService
                 if ($id === null) {
                     $errors[] = new ImportError(
                         type: 'field',
-                        code: 'IBLOCK_NOT_FOUND',
+                        code: ImportErrorCode::IblockNotFound->value,
                         message: "{$entityLabel} не найден: {$value}",
                         field: $code
                     );
@@ -424,7 +506,7 @@ class ImportService
                 $label = $this->crmEntityResolver->getTypeLabel($fieldType);
                 $errors[] = new ImportError(
                     type: 'field',
-                    code: 'INVALID_CRM_REF',
+                    code: ImportErrorCode::InvalidCrmRef->value,
                     message: "{$label}: значение «{$value}» должно быть числовым ID",
                     field: $code
                 );
@@ -436,7 +518,7 @@ class ImportService
                 $label = $this->crmEntityResolver->getTypeLabel($fieldType);
                 $errors[] = new ImportError(
                     type: 'field',
-                    code: 'CRM_ENTITY_NOT_FOUND',
+                    code: ImportErrorCode::CrmEntityNotFound->value,
                     message: "{$label} с ID {$value} не найдена в CRM",
                     field: $code
                 );

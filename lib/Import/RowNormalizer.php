@@ -204,7 +204,7 @@ class RowNormalizer
         if (!preg_match('/^-?\d+$/', $value)) {
             return new ImportError(
                 type: 'field',
-                code: 'INVALID_INTEGER',
+                code: ImportErrorCode::InvalidInteger->value,
                 message: "Значение «{$value}» не является целым числом",
                 field: $fieldCode
             );
@@ -223,7 +223,7 @@ class RowNormalizer
         if (!is_numeric($normalized)) {
             return new ImportError(
                 type: 'field',
-                code: 'INVALID_DOUBLE',
+                code: ImportErrorCode::InvalidDouble->value,
                 message: "Значение «{$value}» не является числом",
                 field: $fieldCode
             );
@@ -240,7 +240,7 @@ class RowNormalizer
         if (!in_array($value, self::BOOLEAN_ALLOWED, true)) {
             return new ImportError(
                 type: 'field',
-                code: 'INVALID_BOOLEAN',
+                code: ImportErrorCode::InvalidBoolean->value,
                 message: "Значение «{$value}» недопустимо для поля Да/Нет. Ожидается: Y, N, 1 или 0",
                 field: $fieldCode
             );
@@ -264,7 +264,7 @@ class RowNormalizer
 
         return new ImportError(
             type: 'field',
-            code: 'INVALID_URL',
+            code: ImportErrorCode::InvalidUrl->value,
             message: "Значение «{$value}» не является корректным URL-адресом",
             field: $fieldCode
         );
@@ -283,7 +283,7 @@ class RowNormalizer
         if (!is_numeric($amount)) {
             return new ImportError(
                 type: 'field',
-                code: 'INVALID_MONEY',
+                code: ImportErrorCode::InvalidMoney->value,
                 message: "Значение «{$value}» не является корректной суммой",
                 field: $fieldCode
             );
@@ -324,7 +324,7 @@ class RowNormalizer
 
         return new ImportError(
             type: 'field',
-            code: 'INVALID_ENUM',
+            code: ImportErrorCode::InvalidEnum->value,
             message: "Значение «{$value}» не найдено в списке допустимых. Допустимые: {$preview}",
             field: $code
         );
@@ -342,7 +342,7 @@ class RowNormalizer
             if ($parsed === false || $parsed->format('d.m.Y H:i:s') !== $value) {
                 return new ImportError(
                     type: 'field',
-                    code: 'INVALID_DATETIME',
+                    code: ImportErrorCode::InvalidDatetime->value,
                     message: 'Неверный формат даты и времени: ' . $value . '. Ожидается ДД.ММ.ГГГГ ЧЧ:ММ:СС',
                     field: $fieldCode
                 );
@@ -354,7 +354,7 @@ class RowNormalizer
         if ($parsed === false || $parsed->format('d.m.Y') !== $value) {
             return new ImportError(
                 type: 'field',
-                code: 'INVALID_DATE',
+                code: ImportErrorCode::InvalidDate->value,
                 message: 'Неверный формат даты: ' . $value . '. Ожидается ДД.ММ.ГГГГ',
                 field: $fieldCode
             );
@@ -402,7 +402,7 @@ class RowNormalizer
                 if ($normalized === null) {
                     $errors[] = new ImportError(
                         type: 'field',
-                        code: 'INVALID_PHONE',
+                        code: ImportErrorCode::InvalidPhone->value,
                         message: 'Неверный формат телефона: ' . $item,
                         field: $fieldCode
                     );
@@ -426,18 +426,6 @@ class RowNormalizer
 
     /**
      * Нормализует номер телефона в формат E.164
-     *
-     * Подготавливает сырой номер перед парсингом:
-     * - очищает от всех символов кроме цифр и +
-     * - для 11-значных российских номеров (7.../8...) добавляет +7
-     *
-     * Если Bitrix-парсер считает номер валидным — форматируем через него.
-     * Иначе проверяем базовый формат (длина, структура) и принимаем как есть.
-     * Это позволяет импортировать номера с нестандартными кодами зон.
-     *
-     * @param string $phone Сырой номер телефона
-     *
-     * @return string|null Нормализованный номер или null если невалидный
      */
     private function normalizePhone(string $phone): ?string
     {
@@ -464,10 +452,6 @@ class RowNormalizer
 
     /**
      * Подготавливает сырой номер телефона для парсера
-     *
-     * @param string $phone Сырой номер
-     *
-     * @return string Подготовленный номер
      */
     private function preparePhone(string $phone): string
     {

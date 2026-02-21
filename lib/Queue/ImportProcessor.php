@@ -7,6 +7,7 @@ use Bitrix\Main\Loader;
 use Bitrix\Main\Type\DateTime;
 use Rwb\Massops\EntityRegistry;
 use Rwb\Massops\Import\ImportError;
+use Rwb\Massops\Import\ImportErrorCode;
 use RuntimeException;
 
 /**
@@ -68,14 +69,13 @@ class ImportProcessor
 
         try {
             $dataSize = strlen($job['IMPORT_DATA'] ?? '');
-            $this->log("job={$jobId} Deserializing IMPORT_DATA, size={$dataSize} bytes");
+            $this->log("job={$jobId} Decoding IMPORT_DATA, size={$dataSize} bytes");
 
-            $allRows = unserialize($job['IMPORT_DATA']);
+            $allRows = json_decode($job['IMPORT_DATA'], true);
 
             if (!is_array($allRows)) {
                 throw new RuntimeException(
-                    'Не удалось десериализовать данные импорта (IMPORT_DATA). '
-                    . 'Вероятно, данные были обрезаны при записи в БД. '
+                    'Не удалось декодировать данные импорта (IMPORT_DATA). '
                     . 'Размер поля: ' . $dataSize . ' байт'
                 );
             }
@@ -87,12 +87,12 @@ class ImportProcessor
 
             $options = [];
             if (!empty($job['IMPORT_OPTIONS'])) {
-                $options = unserialize($job['IMPORT_OPTIONS']);
+                $options = json_decode($job['IMPORT_OPTIONS'], true) ?? [];
             }
 
             $endIndex = min($startIndex + $batchSize, $totalRows);
 
-            $this->log("job={$jobId} Deserialized OK, entityType={$entityType}, totalRows={$totalRows}, batch={$startIndex}..{$endIndex}");
+            $this->log("job={$jobId} Decoded OK, entityType={$entityType}, totalRows={$totalRows}, batch={$startIndex}..{$endIndex}");
 
             $allRowsIndexed = array_values($allRows);
             $batchRows = [];
@@ -109,17 +109,20 @@ class ImportProcessor
             $this->log("job={$jobId} Import result: success={$result['success']}, errors=" . count($result['errors']));
 
             $existingErrors = !empty($job['ERRORS_DATA'])
-                ? unserialize($job['ERRORS_DATA'])
+                ? (json_decode($job['ERRORS_DATA'], true) ?? [])
                 : [];
 
             if (!empty($result['errors'])) {
                 foreach ($result['errors'] as $rowIndex => $rowErrors) {
-                    $existingErrors[$rowIndex] = $rowErrors;
+                    $existingErrors[$rowIndex] = array_map(
+                        static fn($e) => $e instanceof ImportError ? $e->toArray() : $e,
+                        $rowErrors
+                    );
                 }
             }
 
             $existingIds = !empty($job['CREATED_IDS'])
-                ? unserialize($job['CREATED_IDS'])
+                ? (json_decode($job['CREATED_IDS'], true) ?? [])
                 : [];
 
             if (!empty($result['added'])) {
@@ -138,8 +141,8 @@ class ImportProcessor
                 'PROCESSED_ROWS' => $newProcessed,
                 'SUCCESS_COUNT' => $newSuccess,
                 'ERROR_COUNT' => $newErrorCount,
-                'ERRORS_DATA' => serialize($existingErrors),
-                'CREATED_IDS' => serialize($existingIds),
+                'ERRORS_DATA' => json_encode($existingErrors),
+                'CREATED_IDS' => json_encode($existingIds),
             ];
 
             $isComplete = ($newProcessed >= $totalRows);
@@ -162,27 +165,41 @@ class ImportProcessor
             $errorsData = [];
             try {
                 if (!empty($job['ERRORS_DATA'])) {
-                    $errorsData = unserialize($job['ERRORS_DATA']) ?: [];
+                    $errorsData = json_decode($job['ERRORS_DATA'], true) ?? [];
                 }
             } catch (\Throwable) {
                 $errorsData = [];
             }
 
             $errorsData['__exception__'] = [
-                new ImportError(
+                (new ImportError(
                     type: 'system',
-                    code: 'PROCESSING_EXCEPTION',
+                    code: ImportErrorCode::ProcessingException->value,
                     message: $e->getMessage(),
-                ),
+                ))->toArray(),
             ];
 
             try {
-                ImportJobTable::update($jobId, [
-                    'STATUS' => ImportJobStatus::Error->value,
-                    'FINISHED_AT' => new DateTime(),
-                    'ERRORS_DATA' => serialize($errorsData),
-                ]);
-                $this->log("job={$jobId} Error saved to DB, re-throwing");
+                $retryCount = (int) ($job['RETRY_COUNT'] ?? 0);
+                $maxRetries = (int) ($job['MAX_RETRIES'] ?? 3);
+
+                if ($retryCount < $maxRetries) {
+                    // Задача ещё не исчерпала попытки — сбрасываем в Pending для повторной обработки
+                    ImportJobTable::update($jobId, [
+                        'STATUS' => ImportJobStatus::Pending->value,
+                        'RETRY_COUNT' => $retryCount + 1,
+                        'ERRORS_DATA' => json_encode($errorsData),
+                    ]);
+                    $this->log("job={$jobId} Retry {$retryCount}/{$maxRetries}, rescheduled to Pending");
+                } else {
+                    // Попытки исчерпаны — помечаем как ошибку
+                    ImportJobTable::update($jobId, [
+                        'STATUS' => ImportJobStatus::Error->value,
+                        'FINISHED_AT' => new DateTime(),
+                        'ERRORS_DATA' => json_encode($errorsData),
+                    ]);
+                    $this->log("job={$jobId} All retries exhausted ({$maxRetries}), marked as Error");
+                }
             } catch (\Throwable $updateEx) {
                 $this->log("job={$jobId} FAILED to save error to DB: " . $updateEx->getMessage());
             }
