@@ -5,6 +5,7 @@ namespace Rwb\Massops\Import;
 use Bitrix\Main\Loader;
 use Rwb\Massops\Import\ImportErrorCode;
 use Rwb\Massops\Repository\CrmRepository;
+use Rwb\Massops\Service\CidGenerator;
 use Rwb\Massops\Service\DuplicateChecker;
 use Rwb\Massops\Support\UserFieldHelper;
 
@@ -25,6 +26,7 @@ class CompanyImportService extends ImportService
     private const TRACKING_UTM_SOURCE = 'rwb.massops';
 
     private DuplicateChecker $duplicateChecker;
+    private CidGenerator $cidGenerator;
     private ?string $innFieldCode = null;
     private ?int $trackingSourceId = null;
     private bool $trackingSourceResolved = false;
@@ -35,16 +37,35 @@ class CompanyImportService extends ImportService
     ) {
         parent::__construct($repository, $normalizer);
         $this->duplicateChecker = new DuplicateChecker();
+        $this->cidGenerator = new CidGenerator($repository);
     }
 
     /**
      * Hook: проверка дублей внутри загруженного файла (по ИНН)
+     * и валидация конфигурации CID-генерации
      */
     protected function beforeProcessRows(array $rows, array $fieldCodes, array $options): array
     {
+        $errors = [];
+
+        // Валидация конфигурации CID: если поля или свойство инфоблока не настроены —
+        // все строки помечаются ошибкой конфигурации и импорт не выполняется.
+        $cidError = $this->cidGenerator->validate();
+        if ($cidError !== null) {
+            foreach (array_keys($rows) as $rowIndex) {
+                $errors[$rowIndex] = new ImportError(
+                    type: 'config',
+                    code: ImportErrorCode::Invalid->value,
+                    message: 'Ошибка конфигурации CRM: ' . $cidError,
+                    row: $rowIndex + 1,
+                );
+            }
+            return $errors;
+        }
+
         $innFieldCode = $this->getInnFieldCode();
         if (!$innFieldCode) {
-            return [];
+            return $errors;
         }
 
         $preparedRows = [];
@@ -56,7 +77,7 @@ class CompanyImportService extends ImportService
             $preparedRows[$rowIndex] = ['uf' => $normalized->uf];
         }
 
-        return $this->duplicateChecker->checkFileInternalDuplicates($preparedRows, $innFieldCode);
+        return array_replace($errors, $this->duplicateChecker->checkFileInternalDuplicates($preparedRows, $innFieldCode));
     }
 
     /**
@@ -86,11 +107,16 @@ class CompanyImportService extends ImportService
     }
 
     /**
-     * Hook: привязка источника сквозной аналитики к созданной компании
+     * Hook: привязка источника сквозной аналитики и генерация CID
+     *
+     * @return array ['cid' => string|null] — сгенерированный CID для включения в отчёт
      */
-    protected function afterSave(int $rowIndex, int $entityId, array $fields): void
+    protected function afterSave(int $rowIndex, int $entityId, array $fields, array $uf = []): array
     {
         $this->assignTrackingSource($entityId);
+        $cid = $this->cidGenerator->generateForCompany($entityId, $uf);
+
+        return ['cid' => $cid];
     }
 
     /**

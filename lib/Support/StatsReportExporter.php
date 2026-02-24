@@ -94,7 +94,7 @@ class StatsReportExporter
     /**
      * Заполняет лист с результатами импорта
      *
-     * Колонки: ID | (все колонки исходного файла) | Ошибки
+     * Колонки: ID | CID | (все колонки исходного файла) | Ошибки
      */
     private static function fillResultsSheet(Worksheet $sheet, array $job, array $columns): void
     {
@@ -120,6 +120,22 @@ class StatsReportExporter
         $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . '1', 'ID');
         $col++;
 
+        // Колонка CID — показываем только если хотя бы у одной записи есть CID
+        $hasCid = false;
+        foreach ($createdIds as $entry) {
+            if (is_array($entry) && !empty($entry['cid'])) {
+                $hasCid = true;
+                break;
+            }
+        }
+
+        $cidColIndex = null;
+        if ($hasCid) {
+            $cidColIndex = $col;
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . '1', 'CID');
+            $col++;
+        }
+
         foreach ($columns as $column) {
             $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . '1', $column['name']);
             $col++;
@@ -139,13 +155,25 @@ class StatsReportExporter
         foreach ($allRowsIndexed as $rowIndex => $row) {
             $col = 1;
 
-            // Колонка ID
-            $entityId = $createdIds[$rowIndex] ?? null;
+            // Колонка ID — поддерживаем оба формата: int (старый) и array ['id'=>...,'cid'=>...] (новый)
+            $entry = $createdIds[$rowIndex] ?? null;
+            $entityId = is_array($entry) ? ($entry['id'] ?? null) : $entry;
+            $rowCid = is_array($entry) ? ($entry['cid'] ?? null) : null;
+
             $idCellAddr = Coordinate::stringFromColumnIndex($col) . $rowNum;
             if ($entityId) {
                 $sheet->setCellValue($idCellAddr, $entityId);
             }
             $col++;
+
+            // Колонка CID
+            if ($cidColIndex !== null) {
+                $cidCellAddr = Coordinate::stringFromColumnIndex($col) . $rowNum;
+                if ($rowCid !== null) {
+                    $sheet->setCellValue($cidCellAddr, $rowCid);
+                }
+                $col++;
+            }
 
             // Колонки данных
             foreach ($columns as $column) {

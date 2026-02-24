@@ -466,7 +466,8 @@ final class CrmRepository
             $settings = $fieldData['SETTINGS'] ?? [];
 
             if (is_string($settings) && $settings !== '') {
-                $result[$fieldName] = unserialize($settings, ['allowed_classes' => false]) ?: [];
+                $unserialized = unserialize($settings, ['allowed_classes' => false]);
+                $result[$fieldName] = is_array($unserialized) ? $unserialized : [];
             } elseif (is_array($settings)) {
                 $result[$fieldName] = $settings;
             } else {

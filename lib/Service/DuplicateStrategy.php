@@ -38,4 +38,13 @@ interface DuplicateStrategy
      * @return array<int, ImportError> Ошибки, индексированные по rowIndex
      */
     public function checkCrmDuplicates(array $normalizedRows, array $validRowIndexes, array $extra = []): array;
+
+    /**
+     * Возвращает код поля-ключа дублирования (ИНН, телефон, email и т.д.)
+     *
+     * Используется DuplicateChecker для получения кода поля без привязки
+     * к конкретному классу стратегии (устраняет необходимость instanceof-проверок).
+     * Возвращает null, если стратегия не основана на конкретном поле.
+     */
+    public function getKeyFieldCode(): ?string;
 }

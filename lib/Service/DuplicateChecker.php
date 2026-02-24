@@ -62,14 +62,10 @@ class DuplicateChecker
     }
 
     /**
-     * Возвращает код поля ИНН (делегирует стратегии, если та его поддерживает)
+     * Возвращает код ключевого поля стратегии (ИНН, телефон, email и т.д.)
      */
     public function getInnFieldCode(): ?string
     {
-        if ($this->strategy instanceof InnDuplicateStrategy) {
-            return $this->strategy->getInnFieldCode();
-        }
-
-        return null;
+        return $this->strategy->getKeyFieldCode();
     }
 }

@@ -102,15 +102,7 @@ class ImportService
         $enumMappings = $this->repository->getEnumMappings();
         $ufSettings = $this->repository->getUfFieldsSettings();
 
-        $extractor = new ErrorFieldExtractor(
-            $this->repository->getFieldList()
-        );
-
-        $success = 0;
         $errors = [];
-        $items = [];
-
-        $dryRun = ($mode === ImportMode::DryRun);
 
         // Hook: предобработка всего набора строк (например, поиск дублей в файле)
         $preErrors = $this->beforeProcessRows($rows, $fieldCodes, $options);
@@ -118,16 +110,80 @@ class ImportService
             $errors[$rowIndex][] = $error;
         }
 
+        [$normalizedRows, $validRowIndexes, $rowErrors] = $this->normalizeRows(
+            $rows,
+            $preErrors,
+            $fieldCodes,
+            $fieldTypes,
+            $multipleFields,
+            $enumMappings,
+            $ufSettings,
+            $options
+        );
+
+        foreach ($rowErrors as $rowIndex => $rowErrorList) {
+            foreach ($rowErrorList as $error) {
+                $errors[$rowIndex][] = $error;
+            }
+        }
+
+        // Hook: проверки перед сохранением (например, дубли в CRM)
+        $savePreErrors = $this->beforeBatchSave($normalizedRows, $validRowIndexes, $options);
+        foreach ($savePreErrors as $rowIndex => $error) {
+            $errors[$rowIndex][] = $error;
+        }
+
+        [$success, $items, $saveErrors] = $this->saveValidRows(
+            $normalizedRows,
+            $validRowIndexes,
+            $savePreErrors,
+            $mode
+        );
+
+        foreach ($saveErrors as $rowIndex => $rowErrorList) {
+            foreach ($rowErrorList as $error) {
+                $errors[$rowIndex][] = $error;
+            }
+        }
+
+        return [
+            'success' => $success,
+            'errors' => $errors,
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * Нормализует и валидирует каждую строку, пропуская уже отмеченные ошибками
+     *
+     * @return array{0: array, 1: array, 2: array} [normalizedRows, validRowIndexes, errors]
+     */
+    private function normalizeRows(
+        array $rows,
+        array $preErrors,
+        array $fieldCodes,
+        array $fieldTypes,
+        array $multipleFields,
+        array $enumMappings,
+        array $ufSettings,
+        array $options
+    ): array {
         $normalizedRows = [];
         $validRowIndexes = [];
+        $errors = [];
 
         foreach ($rows as $rowIndex => $row) {
             if (isset($preErrors[$rowIndex])) {
                 continue;
             }
 
+            // $fieldCodes содержит '' на позиции ROW_NUM (см. resolveFieldCodes).
+            // RowNormalizer пропускает поля с пустым кодом, поэтому ROW_NUM-значение
+            // на позиции 0 безопасно: оно совпадает с placeholder'ом в fieldCodes.
+            $rowData = array_values($row['data']);
+
             $normalized = $this->normalizer->normalize(
-                array_values($row['data']),
+                $rowData,
                 $fieldCodes,
                 $fieldTypes,
                 $multipleFields,
@@ -176,11 +232,26 @@ class ImportService
             }
         }
 
-        // Hook: проверки перед сохранением (например, дубли в CRM)
-        $savePreErrors = $this->beforeBatchSave($normalizedRows, $validRowIndexes, $options);
-        foreach ($savePreErrors as $rowIndex => $error) {
-            $errors[$rowIndex][] = $error;
-        }
+        return [$normalizedRows, $validRowIndexes, $errors];
+    }
+
+    /**
+     * Сохраняет валидные строки через репозиторий (или симулирует в dry-run режиме)
+     *
+     * @return array{0: int, 1: array, 2: array} [success, items, errors]
+     */
+    private function saveValidRows(
+        array $normalizedRows,
+        array $validRowIndexes,
+        array $savePreErrors,
+        ImportMode $mode
+    ): array {
+        $dryRun = ($mode === ImportMode::DryRun);
+        $extractor = new ErrorFieldExtractor($this->repository->getFieldList());
+
+        $success = 0;
+        $items = [];
+        $errors = [];
 
         foreach ($validRowIndexes as $rowIndex) {
             if (isset($savePreErrors[$rowIndex])) {
@@ -213,8 +284,9 @@ class ImportService
                 ? $result->getId()
                 : null;
 
+            $extra = [];
             if ($entityId && !$dryRun) {
-                $this->afterSave($rowIndex, $entityId, $data['fields']);
+                $extra = $this->afterSave($rowIndex, $entityId, $data['fields'], $data['uf']);
             }
 
             $success++;
@@ -222,14 +294,11 @@ class ImportService
                 'row' => $rowIndex + 1,
                 'data' => $data['fields'],
                 'entityId' => $entityId,
+                'cid' => $extra['cid'] ?? null,
             ];
         }
 
-        return [
-            'success' => $success,
-            'errors' => $errors,
-            'items' => $items,
-        ];
+        return [$success, $items, $errors];
     }
 
     /**
@@ -271,14 +340,23 @@ class ImportService
      * Hook: постобработка после успешного сохранения строки
      *
      * Вызывается после успешного сохранения каждой записи в режиме import.
-     * Используется, например, для привязки источника сквозной аналитики.
+     * Используется, например, для привязки источника сквозной аналитики
+     * или генерации производных полей (CID и т.д.).
+     *
+     * Может вернуть массив дополнительных данных, которые будут добавлены
+     * к записи в результате импорта. Поддерживаемые ключи:
+     * - 'cid' (string|null) — сгенерированный CID компании
      *
      * @param int   $rowIndex Индекс строки
      * @param int   $entityId ID созданной сущности
-     * @param array $fields   Поля сохранённой записи
+     * @param array $fields   Стандартные поля сохранённой записи
+     * @param array $uf       Пользовательские поля сохранённой записи
+     *
+     * @return array Дополнительные данные для включения в результат
      */
-    protected function afterSave(int $rowIndex, int $entityId, array $fields): void
+    protected function afterSave(int $rowIndex, int $entityId, array $fields, array $uf = []): array
     {
+        return [];
     }
 
     /**

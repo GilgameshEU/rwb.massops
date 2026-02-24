@@ -11,3 +11,4 @@ $MESS['RWB_MASSOPS_SAVE_DATA'] = 'Сохранить таблицы очеред
 $MESS['RWB_MASSOPS_SAVE_OPTIONS'] = 'Сохранить настройки модуля';
 $MESS['RWB_MASSOPS_UNINSTALL_SUBMIT'] = 'Удалить модуль';
 $MESS['RWB_MASSOPS_MENU_TITLE'] = 'Массовые операции';
+$MESS['RWB_MASSOPS_CRM_REQUIRED'] = 'Модуль "crm" обязателен для работы rwb.massops. Установите его перед установкой данного модуля.';

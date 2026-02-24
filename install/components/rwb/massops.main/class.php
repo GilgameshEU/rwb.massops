@@ -6,6 +6,9 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
 
 use Bitrix\Main\AccessDeniedException;
 use Bitrix\Main\ArgumentException;
+use Bitrix\Main\Engine\ActionFilter\Authentication;
+use Bitrix\Main\Engine\ActionFilter\Csrf;
+use Bitrix\Main\Engine\ActionFilter\HttpMethod;
 use Bitrix\Main\Engine\Contract\Controllerable;
 use Bitrix\Main\Engine\CurrentUser;
 use Bitrix\Main\Loader;
@@ -46,21 +49,46 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
     }
 
     /**
-     * Конфигурация AJAX-действий компонента
+     * Конфигурация AJAX-действий компонента.
+     *
+     * POST-действия (изменяют состояние): Authentication + Csrf + HttpMethod(['POST']).
+     * Скачивание файлов (GET из браузера): Authentication + HttpMethod(['GET']).
+     * CSRF не применяется к GET-скачиванию — браузер открывает URL напрямую,
+     * сессионный токен при этом не передаётся.
      */
     public function configureActions(): array
     {
+        $postFilters = [
+            new Authentication(),
+            new Csrf(),
+            new HttpMethod([HttpMethod::METHOD_POST]),
+        ];
+
+        $getFilters = [
+            new Authentication(),
+            new HttpMethod([HttpMethod::METHOD_GET]),
+        ];
+
         return [
-            'uploadFile' => ['prefilters' => []],
-            'downloadXlsxTemplate' => ['prefilters' => []],
-            'runImport' => ['prefilters' => []],
-            'runDryRun' => ['prefilters' => []],
-            'clear' => ['prefilters' => []],
-            'startImport' => ['prefilters' => []],
-            'getProgress' => ['prefilters' => []],
-            'getStats' => ['prefilters' => []],
-            'downloadErrorReport' => ['prefilters' => []],
-            'downloadStatsReport' => ['prefilters' => []],
+            // Загрузка файла — POST с файлом
+            'uploadFile' => ['prefilters' => $postFilters],
+
+            // Изменяющие состояние операции — POST + CSRF
+            'runImport' => ['prefilters' => $postFilters],
+            'runDryRun' => ['prefilters' => $postFilters],
+            'clear' => ['prefilters' => $postFilters],
+            'startImport' => ['prefilters' => $postFilters],
+
+            // Чтение состояния — POST + CSRF (вызываются через JS fetch)
+            'getProgress' => ['prefilters' => $postFilters],
+            'getStats' => ['prefilters' => $postFilters],
+
+            // Скачивание шаблона — GET без CSRF (window.location.href)
+            'downloadXlsxTemplate' => ['prefilters' => $getFilters],
+
+            // Скачивание отчётов — POST с sessid (JS создаёт form и сабмитит)
+            'downloadErrorReport' => ['prefilters' => $postFilters],
+            'downloadStatsReport' => ['prefilters' => $postFilters],
         ];
     }
 
@@ -129,6 +157,14 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $file = $_FILES['file'] ?? null;
         if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
             throw new RuntimeException('Файл не загружен');
+        }
+
+        $maxSizeMb = (int) \Bitrix\Main\Config\Option::get('rwb.massops', 'max_file_size_mb', 10);
+        $maxSizeBytes = $maxSizeMb * 1024 * 1024;
+        if ($file['size'] > $maxSizeBytes) {
+            throw new RuntimeException(
+                "Файл слишком большой ({$file['size']} байт). Максимальный допустимый размер: {$maxSizeMb} МБ."
+            );
         }
 
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
@@ -352,7 +388,13 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $this->checkData();
 
         $errorsJson = $this->getRequestParam('errors');
-        $errors = $errorsJson ? json_decode($errorsJson, true) : [];
+        $errors = [];
+        if ($errorsJson !== null && $errorsJson !== '') {
+            $decoded = json_decode($errorsJson, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $errors = $decoded;
+            }
+        }
 
         $columns = SessionStorage::getColumns();
         $rows = SessionStorage::getRows();

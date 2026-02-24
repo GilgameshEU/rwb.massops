@@ -299,6 +299,14 @@ class rwb_massops extends CModule
             $APPLICATION->throwException(
                 Loc::getMessage('RWB_MASSOPS_ERROR_PERMISSION')
             );
+
+            return;
+        }
+
+        if (!Loader::includeModule('crm')) {
+            $APPLICATION->throwException(
+                Loc::getMessage('RWB_MASSOPS_CRM_REQUIRED')
+            );
         }
     }
 

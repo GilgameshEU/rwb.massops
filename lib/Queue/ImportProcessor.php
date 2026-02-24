@@ -8,6 +8,7 @@ use Bitrix\Main\Type\DateTime;
 use Rwb\Massops\EntityRegistry;
 use Rwb\Massops\Import\ImportError;
 use Rwb\Massops\Import\ImportErrorCode;
+use Rwb\Massops\Support\UserFieldHelper;
 use RuntimeException;
 
 /**
@@ -85,10 +86,18 @@ class ImportProcessor
             $totalRows = (int) $job['TOTAL_ROWS'];
             $batchSize = $this->getBatchSize();
 
-            $options = [];
-            if (!empty($job['IMPORT_OPTIONS'])) {
-                $options = json_decode($job['IMPORT_OPTIONS'], true) ?? [];
-            }
+            // Декодируем все JSON-поля один раз — исключаем повторную десериализацию
+            $options = !empty($job['IMPORT_OPTIONS'])
+                ? (json_decode($job['IMPORT_OPTIONS'], true) ?? [])
+                : [];
+
+            $existingErrors = !empty($job['ERRORS_DATA'])
+                ? (json_decode($job['ERRORS_DATA'], true) ?? [])
+                : [];
+
+            $existingIds = !empty($job['CREATED_IDS'])
+                ? (json_decode($job['CREATED_IDS'], true) ?? [])
+                : [];
 
             $endIndex = min($startIndex + $batchSize, $totalRows);
 
@@ -108,10 +117,6 @@ class ImportProcessor
 
             $this->log("job={$jobId} Import result: success={$result['success']}, errors=" . count($result['errors']));
 
-            $existingErrors = !empty($job['ERRORS_DATA'])
-                ? (json_decode($job['ERRORS_DATA'], true) ?? [])
-                : [];
-
             if (!empty($result['errors'])) {
                 foreach ($result['errors'] as $rowIndex => $rowErrors) {
                     $existingErrors[$rowIndex] = array_map(
@@ -121,14 +126,13 @@ class ImportProcessor
                 }
             }
 
-            $existingIds = !empty($job['CREATED_IDS'])
-                ? (json_decode($job['CREATED_IDS'], true) ?? [])
-                : [];
-
             if (!empty($result['added'])) {
                 foreach ($result['added'] as $rowIndex => $item) {
                     if (!empty($item['entityId'])) {
-                        $existingIds[$rowIndex] = (int) $item['entityId'];
+                        $existingIds[$rowIndex] = [
+                            'id'  => (int) $item['entityId'],
+                            'cid' => $item['cid'] ?? null,
+                        ];
                     }
                 }
             }
@@ -156,20 +160,20 @@ class ImportProcessor
 
             ImportJobTable::update($jobId, $updateData);
 
+            // Очищаем статический кэш UserFieldHelper после каждой пачки.
+            // Агент — долгоживущий процесс; без очистки кэш разрастается и может
+            // вернуть устаревшие данные, если UF-поля изменились между запусками.
+            UserFieldHelper::clearCache();
+
             $this->log("job={$jobId} Batch done");
 
             return !$isComplete;
         } catch (\Throwable $e) {
             $this->log("job={$jobId} EXCEPTION: " . $e->getMessage() . "\n" . $e->getTraceAsString());
 
-            $errorsData = [];
-            try {
-                if (!empty($job['ERRORS_DATA'])) {
-                    $errorsData = json_decode($job['ERRORS_DATA'], true) ?? [];
-                }
-            } catch (\Throwable) {
-                $errorsData = [];
-            }
+            // $existingErrors уже декодирован выше; если исключение произошло до
+            // декодирования — используем пустой массив как безопасный фолбэк.
+            $errorsData = $existingErrors ?? [];
 
             $errorsData['__exception__'] = [
                 (new ImportError(

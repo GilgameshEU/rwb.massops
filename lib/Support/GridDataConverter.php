@@ -22,7 +22,10 @@ class GridDataConverter
         }
 
         if ($headerRow === null) {
-            $headerRow = array_shift($rows);
+            // array_shift мутирует массив — используем явное извлечение первого элемента
+            // без изменения ключей остатка (array_slice сохраняет исходные ключи)
+            $headerRow = $rows[array_key_first($rows)];
+            $rows = array_slice($rows, 1, preserve_keys: false);
         }
 
         $columns = [

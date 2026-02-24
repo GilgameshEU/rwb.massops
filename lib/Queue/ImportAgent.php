@@ -114,13 +114,21 @@ class ImportAgent
     private static function writeToFile(string $logDir, string $logLine): bool
     {
         try {
-            if (!@is_dir($logDir)) {
+            // mkdir с recursive=true атомарно создаёт всю цепочку директорий.
+            // @ подавляет EEXIST при параллельном создании двумя агентами одновременно.
+            // После вызова проверяем is_dir — это единственный надёжный способ убедиться,
+            // что директория существует вне зависимости от исхода mkdir.
+            if (!is_dir($logDir)) {
                 @mkdir($logDir, 0775, true);
+
+                if (!is_dir($logDir)) {
+                    return false;
+                }
             }
 
             $logFile = $logDir . '/import_' . date('Y-m-d') . '.log';
 
-            return @file_put_contents($logFile, $logLine, FILE_APPEND | LOCK_EX) !== false;
+            return file_put_contents($logFile, $logLine, FILE_APPEND | LOCK_EX) !== false;
         } catch (\Throwable) {
             return false;
         }

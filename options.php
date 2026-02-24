@@ -43,6 +43,12 @@ $tabs = [
                 '30',
                 ['text', 6],
             ],
+            [
+                'max_file_size_mb',
+                Loc::getMessage('RWB_MASSOPS_OPT_MAX_FILE_SIZE'),
+                '10',
+                ['text', 6],
+            ],
             Loc::getMessage('RWB_MASSOPS_OPT_SECTION_PHONE'),
             [
                 'phone_default_country',

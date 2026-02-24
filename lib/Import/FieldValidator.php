@@ -13,9 +13,9 @@ class FieldValidator
     /**
      * Валидирует поля импортируемых данных
      *
-     * @param array $rows             Массив строк данных для импорта
+     * @param array $rows               Массив строк данных для импорта
      * @param CrmRepository $repository Репозиторий для проверки существования полей
-     * @param string $entityTitle     Название сущности для сообщений об ошибках
+     * @param string $entityTitle       Название сущности для сообщений об ошибках
      *
      * @return ImportError[]
      * @throws LoaderException
@@ -102,7 +102,7 @@ class FieldValidator
     /**
      * Проверяет существование полей в CRM
      *
-     * @param array $header           Массив заголовков для проверки
+     * @param array $header             Массив заголовков для проверки
      * @param CrmRepository $repository Репозиторий CRM для получения списка полей
      *
      * @return ImportError[]
@@ -128,12 +128,15 @@ class FieldValidator
         }
 
         if (!empty($missing)) {
-            $errors[] = new ImportError(
-                type: 'header',
-                code: ImportErrorCode::HeaderNotFound->value,
-                message: 'В CRM' . ($this->entityTitle ? ' (' . $this->entityTitle . ')' : '') . ' не найдены поля: ' . implode(', ', $missing),
-                context: ['missing_fields' => $missing]
-            );
+            $prefix = 'В CRM' . ($this->entityTitle ? ' (' . $this->entityTitle . ')' : '');
+            foreach ($missing as $fieldTitle) {
+                $errors[] = new ImportError(
+                    type: 'header',
+                    code: ImportErrorCode::HeaderNotFound->value,
+                    message: "{$prefix} не найдено поле «{$fieldTitle}»",
+                    context: ['field_title' => $fieldTitle]
+                );
+            }
         }
 
         return $errors;

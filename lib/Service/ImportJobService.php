@@ -223,7 +223,10 @@ class ImportJobService
 
             $response['errors'] = $gridErrors;
             $response['fieldToColumn'] = $this->getFieldToColumnMapping($job['ENTITY_TYPE']);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            \Bitrix\Main\Application::getInstance()
+                ->getExceptionHandler()
+                ->writeToLog($e);
         }
     }
 

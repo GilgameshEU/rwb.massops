@@ -30,6 +30,15 @@ final class EntityRegistry
     private static ?array $map = null;
 
     /**
+     * Кэш экземпляров ImportService — один на тип сущности за время жизни процесса.
+     * Агент обрабатывает несколько пачек подряд; повторное создание сервиса бессмысленно,
+     * так как его зависимости (репозиторий, нормализатор) stateless.
+     *
+     * @var array<string, ImportService>
+     */
+    private static array $importServiceCache = [];
+
+    /**
      * Встроенные сущности по умолчанию
      */
     private const DEFAULT_MAP = [
@@ -47,7 +56,7 @@ final class EntityRegistry
             'entityType' => EntityType::Contact,
             'importClass' => ContactImportService::class,
             'listUrl' => '/crm/contact/list/',
-            'disabled' => false,
+            'disabled' => true, // Временно отключено
         ],
         'deal' => [
             'title' => 'Сделки',
@@ -146,20 +155,47 @@ final class EntityRegistry
     }
 
     /**
-     * Создаёт import-сервис для указанного типа сущности
+     * Возвращает import-сервис для указанного типа сущности (с кэшированием)
+     *
+     * Экземпляр создаётся один раз за время жизни процесса — это безопасно,
+     * так как ImportService и его зависимости stateless.
      */
     public static function createImportService(string $key): ImportService
     {
+        if (isset(self::$importServiceCache[$key])) {
+            return self::$importServiceCache[$key];
+        }
+
         $config = self::getConfig($key);
         $repository = self::createRepository($key);
 
         if ($config['importClass'] !== null) {
             $importClass = $config['importClass'];
 
-            return new $importClass($repository);
+            if (!is_a($importClass, ImportService::class, true)) {
+                throw new RuntimeException(
+                    "importClass '{$importClass}' для сущности '{$key}' не является наследником ImportService"
+                );
+            }
+
+            $service = new $importClass($repository);
+        } else {
+            $service = new ImportService($repository, new RowNormalizer());
         }
 
-        return new ImportService($repository, new RowNormalizer());
+        self::$importServiceCache[$key] = $service;
+
+        return $service;
+    }
+
+    /**
+     * Сбрасывает кэш экземпляров ImportService
+     *
+     * Полезно в тестах и для принудительного обновления конфигурации.
+     */
+    public static function clearImportServiceCache(): void
+    {
+        self::$importServiceCache = [];
     }
 
     /**

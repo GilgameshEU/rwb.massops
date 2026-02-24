@@ -57,6 +57,18 @@ class InnDuplicateStrategy implements DuplicateStrategy
             }
 
             $inn = $this->normalizeInn($inn);
+
+            if (!$this->isValidInn($inn)) {
+                $errors[$rowIndex] = new ImportError(
+                    type: 'validation',
+                    code: ImportErrorCode::Invalid->value,
+                    message: "Некорректный формат ИНН «{$inn}»: должно быть 10 цифр (ЮЛ) или 12 цифр (ФЛ/ИП)",
+                    row: $rowIndex + 1,
+                    field: $innFieldCode,
+                );
+                continue;
+            }
+
             $innToRows[$inn][] = $rowIndex;
         }
 
@@ -113,6 +125,11 @@ class InnDuplicateStrategy implements DuplicateStrategy
             }
 
             $inn = $this->normalizeInn((string) $inn);
+
+            if (!$this->isValidInn($inn)) {
+                continue; // невалидный ИНН — уже отловлен на этапе checkFileInternalDuplicates
+            }
+
             $innToRow[$inn] = $rowIndex;
         }
 
@@ -155,6 +172,14 @@ class InnDuplicateStrategy implements DuplicateStrategy
     }
 
     /**
+     * {@inheritdoc}
+     */
+    public function getKeyFieldCode(): ?string
+    {
+        return $this->getInnFieldCode();
+    }
+
+    /**
      * Извлекает ИНН из строки данных
      */
     private function extractInn(array $row, string $innFieldCode): ?string
@@ -175,11 +200,20 @@ class InnDuplicateStrategy implements DuplicateStrategy
     }
 
     /**
-     * Нормализует ИНН (убирает пробелы)
+     * Нормализует ИНН (убирает пробелы и лишние символы)
      */
     private function normalizeInn(string $inn): string
     {
         return trim(preg_replace('/\s+/', '', $inn));
+    }
+
+    /**
+     * Проверяет, является ли строка валидным ИНН.
+     * Допустимые форматы: 10 цифр (ЮЛ) или 12 цифр (ФЛ/ИП).
+     */
+    private function isValidInn(string $inn): bool
+    {
+        return ctype_digit($inn) && (strlen($inn) === 10 || strlen($inn) === 12);
     }
 
     /**
