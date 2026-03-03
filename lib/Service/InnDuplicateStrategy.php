@@ -62,7 +62,7 @@ class InnDuplicateStrategy implements DuplicateStrategy
                 $errors[$rowIndex] = new ImportError(
                     type: 'validation',
                     code: ImportErrorCode::Invalid->value,
-                    message: "Некорректный формат ИНН «{$inn}»: должно быть 10 цифр (ЮЛ) или 12 цифр (ФЛ/ИП)",
+                    message: "Некорректный формат ИНН «{$inn}»: значение не должно быть пустым",
                     row: $rowIndex + 1,
                     field: $innFieldCode,
                 );
@@ -209,11 +209,12 @@ class InnDuplicateStrategy implements DuplicateStrategy
 
     /**
      * Проверяет, является ли строка валидным ИНН.
-     * Допустимые форматы: 10 цифр (ЮЛ) или 12 цифр (ФЛ/ИП).
+     * Допускаются любые непустые строки: цифры, буквы и символы —
+     * форматы ИНН различаются в зависимости от страны.
      */
     private function isValidInn(string $inn): bool
     {
-        return ctype_digit($inn) && (strlen($inn) === 10 || strlen($inn) === 12);
+        return $inn !== '';
     }
 
     /**

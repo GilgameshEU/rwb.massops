@@ -10,18 +10,18 @@ if (!defined('B_PROLOG_INCLUDED') || B_PROLOG_INCLUDED !== true) {
 
 Extension::load("ui.buttons");
 
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/errorHandler.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/gridHighlighter.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/tabManager.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/wizardManager.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/entitySelector.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/dropzoneHandler.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/uploadHandler.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/progressHandler.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/importHandler.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/templateHandler.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/statsHandler.js');
-Asset::getInstance()->AddJS($this->GetFolder() . '/js/main.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/errorHandler.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/gridHighlighter.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/tabManager.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/wizardManager.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/entitySelector.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/dropzoneHandler.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/uploadHandler.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/progressHandler.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/importHandler.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/templateHandler.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/statsHandler.js');
+Asset::getInstance()->addJS($this->getFolder() . '/js/main.js');
 
 $entityTypes = $arResult['ENTITY_TYPES'] ?? [];
 $currentEntityType = $arResult['CURRENT_ENTITY_TYPE'];
@@ -53,14 +53,14 @@ $svgIcons = [
     <!-- Табы навигации -->
     <div class="rwb-massops__tabs">
         <div class="rwb-massops__tab rwb-massops__tab--active" data-tab="import">
-            Массовый импорт
+            <?= getMessage('RWB_MASSOPS_TAB_IMPORT') ?>
         </div>
         <div class="rwb-massops__tab rwb-massops__tab--disabled" data-tab="dedup">
-            Поиск дублей
-            <span class="rwb-massops__tab-badge">скоро</span>
+            <?= getMessage('RWB_MASSOPS_TAB_DEDUP') ?>
+            <span class="rwb-massops__tab-badge"><?= getMessage('RWB_MASSOPS_BADGE_SOON') ?></span>
         </div>
         <div class="rwb-massops__tab" data-tab="stats">
-            Статистика
+            <?= getMessage('RWB_MASSOPS_TAB_STATS') ?>
         </div>
     </div>
 
@@ -75,38 +75,39 @@ $svgIcons = [
                 <div class="rwb-wizard__stepper">
                     <div class="rwb-wizard__step rwb-wizard__step--active" data-step="1">
                         <span class="rwb-wizard__step-number">1</span>
-                        <span class="rwb-wizard__step-label">Выбор сущности</span>
+                        <span class="rwb-wizard__step-label"><?= getMessage('RWB_MASSOPS_STEP1_LABEL') ?></span>
                     </div>
                     <div class="rwb-wizard__step" data-step="2">
                         <span class="rwb-wizard__step-number">2</span>
-                        <span class="rwb-wizard__step-label">Загрузка файла</span>
+                        <span class="rwb-wizard__step-label"><?= getMessage('RWB_MASSOPS_STEP2_LABEL') ?></span>
                     </div>
                     <div class="rwb-wizard__step" data-step="3">
                         <span class="rwb-wizard__step-number">3</span>
-                        <span class="rwb-wizard__step-label">Предпросмотр и импорт</span>
+                        <span class="rwb-wizard__step-label"><?= getMessage('RWB_MASSOPS_STEP3_LABEL') ?></span>
                     </div>
                 </div>
 
                 <!-- Шаг 1: Выбор сущности -->
                 <div class="rwb-wizard__panel rwb-wizard__panel--active" data-panel="1">
                     <div class="rwb-entity-cards">
-                        <?php foreach ($entityTypes as $key => $entity):
+                        <?php
+                        foreach ($entityTypes as $key => $entity):
                             $isDisabled = !empty($entity['disabled']);
                             $cardClass = 'rwb-entity-card' . ($isDisabled ? ' rwb-entity-card--disabled' : '');
-                        ?>
+                            ?>
                             <div class="<?= $cardClass ?>" data-entity="<?= htmlspecialchars($key) ?>"<?= $isDisabled ? ' data-disabled="true"' : '' ?>>
                                 <div class="rwb-entity-card__icon">
                                     <?= $svgIcons[$entity['icon']] ?? '' ?>
                                 </div>
                                 <div class="rwb-entity-card__title"><?= htmlspecialchars($entity['title']) ?></div>
                                 <?php if ($isDisabled): ?>
-                                    <div class="rwb-entity-card__badge">скоро</div>
+                                    <div class="rwb-entity-card__badge"><?= getMessage('RWB_MASSOPS_BADGE_SOON') ?></div>
                                 <?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
                     <div class="rwb-wizard__actions">
-                        <button class="ui-btn ui-btn-primary" id="rwb-wizard-next-1" disabled>Далее</button>
+                        <button class="ui-btn ui-btn-primary" id="rwb-wizard-next-1" disabled><?= getMessage('RWB_MASSOPS_BTN_NEXT') ?></button>
                     </div>
                 </div>
 
@@ -117,23 +118,23 @@ $svgIcons = [
                             <?= $svgIcons['upload'] ?>
                         </div>
                         <div class="rwb-dropzone__text">
-                            Перетащите файл сюда или <strong>нажмите для выбора</strong>
+                            <?= getMessage('RWB_MASSOPS_DROPZONE_TEXT') ?>
                         </div>
-                        <div class="rwb-dropzone__formats">Поддерживаемый формат: .xlsx</div>
+                        <div class="rwb-dropzone__formats"><?= getMessage('RWB_MASSOPS_DROPZONE_FORMATS') ?></div>
                         <div class="rwb-dropzone__file-info">
                             <span class="rwb-dropzone__file-name"></span>
-                            <span class="rwb-dropzone__file-remove" title="Убрать файл">&times;</span>
+                            <span class="rwb-dropzone__file-remove" title="<?= getMessage('RWB_MASSOPS_DROPZONE_REMOVE_TITLE') ?>">&times;</span>
                         </div>
                         <input type="file" id="rwb-import-file" accept=".xlsx" style="display: none;">
                     </div>
 
-                    <a class="rwb-dropzone__template-link" id="rwb-import-template">Скачать шаблон импорта</a>
+                    <a class="rwb-dropzone__template-link" id="rwb-import-template"><?= getMessage('RWB_MASSOPS_DROPZONE_TEMPLATE_LINK') ?></a>
 
                     <div id="rwb-upload-errors-container"></div>
 
                     <div class="rwb-wizard__actions">
-                        <button class="ui-btn ui-btn-light" id="rwb-wizard-back-2">Назад</button>
-                        <button class="ui-btn ui-btn-primary" id="rwb-wizard-upload" disabled>Загрузить</button>
+                        <button class="ui-btn ui-btn-light" id="rwb-wizard-back-2"><?= getMessage('RWB_MASSOPS_BTN_BACK') ?></button>
+                        <button class="ui-btn ui-btn-primary" id="rwb-wizard-upload" disabled><?= getMessage('RWB_MASSOPS_BTN_UPLOAD') ?></button>
                     </div>
                 </div>
 
@@ -142,29 +143,30 @@ $svgIcons = [
                     <div class="rwb-preview">
                         <div class="rwb-preview__toolbar">
                             <div class="rwb-preview__info">
-                                Загружено строк: <strong id="rwb-row-count"><?= $arResult['GRID_TOTAL_ROWS'] ?? count($arResult['GRID_ROWS']) ?></strong>
+                                <?= getMessage('RWB_MASSOPS_PREVIEW_ROW_COUNT') ?> <strong id="rwb-row-count"><?= $arResult['GRID_TOTAL_ROWS'] ?? count($arResult['GRID_ROWS']) ?></strong>
                             </div>
 
-                            <button class="ui-btn ui-btn-primary ui-btn-sm" id="rwb-import-run">Проверить</button>
+                            <button class="ui-btn ui-btn-primary ui-btn-sm" id="rwb-import-run"><?= getMessage('RWB_MASSOPS_BTN_VALIDATE') ?></button>
 
                             <div id="rwb-import-actions" style="display: none;">
                                 <label class="rwb-toggle" id="rwb-create-cabinets-wrap" style="display: none;">
                                     <input type="checkbox" class="rwb-toggle__input" id="rwb-create-cabinets">
                                     <span class="rwb-toggle__track"></span>
-                                    <span class="rwb-toggle__label">Создать кабинеты</span>
+                                    <span class="rwb-toggle__label"><?= getMessage('RWB_MASSOPS_TOGGLE_CABINETS') ?></span>
                                 </label>
                                 <button class="ui-btn ui-btn-success ui-btn-sm" id="rwb-import-start"></button>
                             </div>
 
                             <span id="rwb-import-nothing" class="rwb-preview__nothing" style="display: none;">
-                                Нет записей для добавления
+                                <?= getMessage('RWB_MASSOPS_NO_RECORDS') ?>
                             </span>
 
                             <div id="rwb-import-complete-actions" style="display: none;">
                                 <?php if ($currentListUrl): ?>
-                                <a href="<?= htmlspecialchars($currentListUrl) ?>" class="ui-btn ui-btn-primary ui-btn-sm">
-                                    Перейти к <?= htmlspecialchars($currentEntityConfig['title'] ?? 'списку') ?>
-                                </a>
+                                    <a href="<?= htmlspecialchars($currentListUrl) ?>"
+                                       class="ui-btn ui-btn-primary ui-btn-sm">
+                                        <?= getMessage('RWB_MASSOPS_BTN_GO_TO_LIST', ['#ENTITY#' => htmlspecialchars($currentEntityConfig['title'] ?? getMessage('RWB_MASSOPS_BTN_GO_TO_LIST_DEFAULT'))]) ?>
+                                    </a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -176,7 +178,7 @@ $svgIcons = [
                                 <div class="rwb-progress__fill" id="rwb-progress-fill" style="width: 0%;"></div>
                             </div>
                             <div class="rwb-progress__text">
-                                <span id="rwb-progress-label">Импорт...</span>
+                                <span id="rwb-progress-label"><?= getMessage('RWB_MASSOPS_PROGRESS_LABEL') ?></span>
                                 <span id="rwb-progress-percent">0%</span>
                             </div>
                             <div class="rwb-progress__stats" id="rwb-progress-stats"></div>
@@ -205,7 +207,6 @@ $svgIcons = [
                                 $gridParams['NAV_OBJECT'] = $arResult['GRID_NAV'];
                                 $gridParams['SHOW_NAVIGATION_PANEL'] = true;
                                 $gridParams['SHOW_PAGINATION'] = true;
-                                $gridParams['SHOW_TOTAL_COUNTER'] = true;
                                 $gridParams['TOTAL_ROWS_COUNT'] = $arResult['GRID_TOTAL_ROWS'];
                                 $gridParams['NAV_PARAM_NAME'] = 'rwb-grid-nav';
                                 $gridParams['PAGE_SIZES'] = [
@@ -228,8 +229,8 @@ $svgIcons = [
                     </div>
 
                     <div class="rwb-wizard__actions">
-                        <button class="ui-btn ui-btn-light" id="rwb-wizard-back-3">Назад</button>
-                        <button class="ui-btn ui-btn-light-danger" id="rwb-import-clear">Очистить и начать заново</button>
+                        <button class="ui-btn ui-btn-light" id="rwb-wizard-back-3"><?= getMessage('RWB_MASSOPS_BTN_BACK') ?></button>
+                        <button class="ui-btn ui-btn-light-danger" id="rwb-import-clear"><?= getMessage('RWB_MASSOPS_BTN_CLEAR') ?></button>
                     </div>
                 </div>
 
@@ -242,8 +243,8 @@ $svgIcons = [
                 <div class="rwb-placeholder__icon">
                     <?= $svgIcons['search'] ?>
                 </div>
-                <div class="rwb-placeholder__title">Поиск дублей</div>
-                <div class="rwb-placeholder__text">Функционал находится в разработке и скоро будет доступен.</div>
+                <div class="rwb-placeholder__title"><?= getMessage('RWB_MASSOPS_DEDUP_TITLE') ?></div>
+                <div class="rwb-placeholder__text"><?= getMessage('RWB_MASSOPS_DEDUP_TEXT') ?></div>
             </div>
         </div>
 
@@ -251,30 +252,30 @@ $svgIcons = [
         <div id="rwb-tab-stats" class="rwb-massops__tab-content">
             <div class="rwb-stats">
                 <div class="rwb-stats__toolbar">
-                    <div class="rwb-stats__title">История операций импорта</div>
-                    <button class="ui-btn ui-btn-light ui-btn-sm" id="rwb-stats-refresh">Обновить</button>
+                    <div class="rwb-stats__title"><?= getMessage('RWB_MASSOPS_STATS_TITLE') ?></div>
+                    <button class="ui-btn ui-btn-light ui-btn-sm" id="rwb-stats-refresh"><?= getMessage('RWB_MASSOPS_BTN_REFRESH') ?></button>
                 </div>
                 <div class="rwb-stats__loading" id="rwb-stats-loading" style="display: none;">
-                    Загрузка данных...
+                    <?= getMessage('RWB_MASSOPS_STATS_LOADING') ?>
                 </div>
                 <div class="rwb-stats__empty" id="rwb-stats-empty" style="display: none;">
-                    Нет данных об операциях импорта.
+                    <?= getMessage('RWB_MASSOPS_STATS_EMPTY') ?>
                 </div>
                 <div class="rwb-stats__table-wrap" id="rwb-stats-table-wrap" style="display: none;">
                     <table class="rwb-stats__table" id="rwb-stats-table">
                         <thead>
-                            <tr>
-                                <th>Пользователь</th>
-                                <th>Сущность</th>
-                                <th>Статус</th>
-                                <th>Всего</th>
-                                <th>Успешно</th>
-                                <th>Ошибок</th>
-                                <th>Создано</th>
-                                <th>Начало</th>
-                                <th>Завершено</th>
-                                <th>Отчёт</th>
-                            </tr>
+                        <tr>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_USER') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_ENTITY') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_STATUS') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_TOTAL') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_SUCCESS') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_ERRORS') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_CREATED') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_START') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_FINISHED') ?></th>
+                            <th><?= getMessage('RWB_MASSOPS_STATS_COL_REPORT') ?></th>
+                        </tr>
                         </thead>
                         <tbody id="rwb-stats-tbody"></tbody>
                     </table>

@@ -178,8 +178,14 @@
 }
 
 @keyframes rwb-fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* ===== Кнопки wizard ===== */
@@ -531,6 +537,7 @@
 .rwb-grid-row-error > td {
     background-color: #fee2e2 !important;
 }
+
 .rwb-grid-row-error {
     cursor: help;
 }
@@ -538,6 +545,7 @@
 .rwb-grid-row-duplicate > td {
     background-color: #dbeafe !important;
 }
+
 .rwb-grid-row-duplicate {
     cursor: help;
 }
@@ -848,4 +856,8 @@
 .ui-btn[disabled] {
     opacity: 0.5;
     pointer-events: none;
+}
+
+#rwb-grid-container .main-grid-bottom-panels {
+    display: none !important;
 }
