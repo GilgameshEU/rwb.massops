@@ -10,6 +10,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Rwb\Massops\Import\Parser\XlsxParser;
 
 /**
  * Экспортёр XLSX-шаблонов для импорта
@@ -106,7 +107,7 @@ class XlsxTemplateExporter
         }
 
         $templateSheet = $spreadsheet->getActiveSheet();
-        $templateSheet->setTitle('Импорт');
+        $templateSheet->setTitle(XlsxParser::IMPORT_SHEET_NAME);
         self::fillTemplateSheet($templateSheet, $requiredFields);
 
         $referenceSheet = $spreadsheet->createSheet();
