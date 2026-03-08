@@ -44,6 +44,7 @@
             this.setLoading(uploadBtn, true, 'Загрузка...');
 
             var errContainer = document.getElementById('rwb-upload-errors-container');
+            window.RwbImportErrorHandler.removeBlock('rwb-upload-errors');
 
             BX.ajax.runComponentAction('rwb:massops.main', 'uploadFile', {
                 mode: 'class',

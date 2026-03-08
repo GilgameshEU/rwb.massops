@@ -23,6 +23,13 @@ if (!$USER->isAdmin()) {
     $APPLICATION->authForm(Loc::getMessage('ACCESS_DENIED'));
 }
 
+// Список групп для селекта доступа
+$accessGroups = [0 => Loc::getMessage('RWB_MASSOPS_OPT_ACCESS_GROUP_NONE')];
+$rsGroups = \CGroup::getList('id', 'asc', ['ACTIVE' => 'Y']);
+while ($group = $rsGroups->fetch()) {
+    $accessGroups[(int) $group['ID']] = $group['NAME'];
+}
+
 // Описание вкладок и полей
 $tabs = [
     [
@@ -61,6 +68,13 @@ $tabs = [
                 Loc::getMessage('RWB_MASSOPS_OPT_DELIMITER'),
                 ',',
                 ['text', 3],
+            ],
+            Loc::getMessage('RWB_MASSOPS_OPT_SECTION_ACCESS'),
+            [
+                'access_group_id',
+                Loc::getMessage('RWB_MASSOPS_OPT_ACCESS_GROUP'),
+                '0',
+                ['select', $accessGroups],
             ],
         ],
     ],
@@ -149,6 +163,14 @@ $tabControl->begin();
                             name="<?= htmlspecialcharsbx($optionName) ?>"
                             value="<?= htmlspecialcharsbx($value) ?>"
                         >
+                    <?php elseif ($optionType[0] === 'select'): ?>
+                        <select id="<?= htmlspecialcharsbx($optionName) ?>" name="<?= htmlspecialcharsbx($optionName) ?>">
+                            <?php foreach ($optionType[1] as $optVal => $optLabel): ?>
+                                <option value="<?= htmlspecialcharsbx((string) $optVal) ?>"<?= ((string) $value === (string) $optVal) ? ' selected' : '' ?>>
+                                    <?= htmlspecialcharsbx($optLabel) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     <?php endif; ?>
                 </td>
             </tr>

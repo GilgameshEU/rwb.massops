@@ -27,7 +27,7 @@ class StatsReportExporter
      * @param string $entityTitle Название типа сущности
      * @param string $filename    Имя файла для скачивания
      */
-    public static function export(array $job, string $entityTitle, string $filename): void
+    public static function export(array $job, string $entityTitle, string $filename, array $fieldLabels = []): void
     {
         $spreadsheet = new Spreadsheet();
 
@@ -40,7 +40,7 @@ class StatsReportExporter
 
         $resultsSheet = $spreadsheet->createSheet();
         $resultsSheet->setTitle('Результаты импорта');
-        self::fillResultsSheet($resultsSheet, $job, $columns);
+        self::fillResultsSheet($resultsSheet, $job, $columns, $fieldLabels);
 
         self::output($spreadsheet, $filename);
     }
@@ -96,7 +96,7 @@ class StatsReportExporter
      *
      * Колонки: ID | CID | (все колонки исходного файла) | Ошибки
      */
-    private static function fillResultsSheet(Worksheet $sheet, array $job, array $columns): void
+    private static function fillResultsSheet(Worksheet $sheet, array $job, array $columns, array $fieldLabels = []): void
     {
         $allRows = !empty($job['IMPORT_DATA']) ? (json_decode($job['IMPORT_DATA'], true) ?? []) : [];
         $createdIds = !empty($job['CREATED_IDS']) ? (json_decode($job['CREATED_IDS'], true) ?? []) : [];
@@ -187,7 +187,7 @@ class StatsReportExporter
             $errorMessages = [];
             if (isset($errors[$rowIndex]) && !empty($errors[$rowIndex])) {
                 foreach ($errors[$rowIndex] as $error) {
-                    $errorMessages[] = self::formatErrorMessage($error);
+                    $errorMessages[] = self::formatErrorMessage($error, $fieldLabels);
                 }
             }
 
@@ -215,10 +215,14 @@ class StatsReportExporter
     /**
      * Форматирует сообщение об ошибке
      */
-    private static function formatErrorMessage($error): string
+    private static function formatErrorMessage($error, array $fieldLabels = []): string
     {
         if ($error instanceof \Rwb\Massops\Import\ImportError) {
-            return $error->message;
+            $message = $error->message;
+            if ($error->field !== null && isset($fieldLabels[$error->field])) {
+                return '[' . $fieldLabels[$error->field] . '] ' . $message;
+            }
+            return $message;
         }
 
         if (!is_array($error)) {
@@ -249,7 +253,13 @@ class StatsReportExporter
             }
         }
 
-        return $error['message'] ?? (string) $error;
+        $message = $error['message'] ?? (string) $error;
+        $field = $error['field'] ?? '';
+        if ($field !== '' && isset($fieldLabels[$field])) {
+            return '[' . $fieldLabels[$field] . '] ' . $message;
+        }
+
+        return $message;
     }
 
     /**

@@ -60,6 +60,7 @@
                 if (e.target === self._removeBtn) {
                     return;
                 }
+                self._fileInput.value = '';
                 self._fileInput.click();
             });
 

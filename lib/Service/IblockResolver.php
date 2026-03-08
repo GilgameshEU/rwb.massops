@@ -21,6 +21,9 @@ class IblockResolver
     /** @var array<int, array<string, int|false>> */
     private array $sectionCache = [];
 
+    /** @var array<int, string> */
+    private array $iblockTypeCache = [];
+
     private ?bool $moduleAvailable = null;
 
     /**
@@ -171,6 +174,27 @@ class IblockResolver
         $this->sectionCache[$iblockId][$cacheKey] = $sectionId;
 
         return $sectionId !== false ? $sectionId : null;
+    }
+
+    /**
+     * Возвращает IBLOCK_TYPE_ID инфоблока по его ID
+     *
+     * Результат кэшируется. Возвращает пустую строку если не найден.
+     */
+    public function getIblockTypeId(int $iblockId): string
+    {
+        if (isset($this->iblockTypeCache[$iblockId])) {
+            return $this->iblockTypeCache[$iblockId];
+        }
+
+        if (!$this->ensureModule()) {
+            return $this->iblockTypeCache[$iblockId] = '';
+        }
+
+        $rsIblock = \CIBlock::getList([], ['=ID' => $iblockId], false, ['nTopCount' => 1], ['IBLOCK_TYPE_ID']);
+        $iblock = $rsIblock->fetch();
+
+        return $this->iblockTypeCache[$iblockId] = (string) ($iblock['IBLOCK_TYPE_ID'] ?? '');
     }
 
     /**

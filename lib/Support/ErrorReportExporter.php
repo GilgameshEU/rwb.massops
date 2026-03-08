@@ -31,7 +31,8 @@ class ErrorReportExporter
         array $columns,
         array $rows,
         array $errors,
-        string $filename = 'import_errors.xlsx'
+        string $filename = 'import_errors.xlsx',
+        array $fieldLabels = []
     ): void {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -66,7 +67,7 @@ class ErrorReportExporter
 
             if (isset($errors[$rowIndex]) && !empty($errors[$rowIndex])) {
                 foreach ($errors[$rowIndex] as $error) {
-                    $errorMessages[] = self::formatErrorMessage($error);
+                    $errorMessages[] = self::formatErrorMessage($error, $fieldLabels);
                     if (isset($error['type']) && $error['type'] === 'duplicate') {
                         $hasDuplicateError = true;
                     }
@@ -105,7 +106,7 @@ class ErrorReportExporter
      *
      * @return string
      */
-    private static function formatErrorMessage(array $error): string
+    private static function formatErrorMessage(array $error, array $fieldLabels = []): string
     {
         $code = $error['code'] ?? '';
         $context = $error['context'] ?? [];
@@ -131,7 +132,13 @@ class ErrorReportExporter
             }
         }
 
-        return $error['message'] ?? (string)$error;
+        $message = $error['message'] ?? (string)$error;
+        $field = $error['field'] ?? '';
+        if ($field !== '' && isset($fieldLabels[$field])) {
+            return '[' . $fieldLabels[$field] . '] ' . $message;
+        }
+
+        return $message;
     }
 
     /**

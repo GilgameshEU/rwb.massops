@@ -515,6 +515,8 @@ class ImportService
 
             $isElement = ($fieldType === 'iblock_element');
             $entityLabel = $isElement ? 'Элемент инфоблока' : 'Раздел инфоблока';
+            $iblockType = $this->iblockResolver->getIblockTypeId($iblockId);
+            $errorContext = ['iblockId' => $iblockId, 'iblockType' => $iblockType];
 
             if (is_array($value)) {
                 $resolved = [];
@@ -528,7 +530,8 @@ class ImportService
                             type: 'field',
                             code: ImportErrorCode::IblockNotFound->value,
                             message: "{$entityLabel} не найден: {$v}",
-                            field: $code
+                            field: $code,
+                            context: $errorContext
                         );
                     } else {
                         $resolved[] = $id;
@@ -545,7 +548,8 @@ class ImportService
                         type: 'field',
                         code: ImportErrorCode::IblockNotFound->value,
                         message: "{$entityLabel} не найден: {$value}",
-                        field: $code
+                        field: $code,
+                        context: $errorContext
                     );
                     unset($uf[$code]);
                 } else {

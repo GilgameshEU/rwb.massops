@@ -98,7 +98,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
      */
     public function executeComponent(): void
     {
-        if (!CurrentUser::get()->isAdmin()) {
+        if (!$this->hasAccess()) {
             ShowError('Доступ запрещён');
 
             return;
@@ -294,6 +294,7 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
             'errors' => $this->formatGridErrors($result['errors']),
             'wouldBeAddedDetails' => $wouldBeAdded,
             'fieldToColumn' => $this->getFieldToColumnMapping($entityType),
+            'fieldLabels' => $this->getFieldLabelMapping($entityType),
         ];
     }
 
@@ -328,11 +329,23 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $this->checkAdmin();
 
         $service = new ImportJobService();
-
-        return $service->getProgress(
+        $result = $service->getProgress(
             $this->getRequestInt('jobId'),
             (int) CurrentUser::get()->getId()
         );
+
+        $entityType = SessionStorage::getEntityType();
+        if ($entityType) {
+            try {
+                $result['fieldLabels'] = $this->getFieldLabelMapping($entityType);
+            } catch (\Throwable) {
+                $result['fieldLabels'] = [];
+            }
+        } else {
+            $result['fieldLabels'] = [];
+        }
+
+        return $result;
     }
 
 
@@ -398,11 +411,20 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
 
         $columns = SessionStorage::getColumns();
         $rows = SessionStorage::getRows();
-        $entityType = SessionStorage::getEntityType() ?: 'import';
+        $storedEntityType = SessionStorage::getEntityType();
+        $entityType = $storedEntityType ?: 'import';
+
+        $fieldLabels = [];
+        if ($storedEntityType) {
+            try {
+                $fieldLabels = $this->getFieldLabelMapping($storedEntityType);
+            } catch (\Throwable) {
+            }
+        }
 
         $filename = $entityType . '_errors_' . date('Y-m-d_H-i') . '.xlsx';
 
-        ErrorReportExporter::export($columns, $rows, $errors, $filename);
+        ErrorReportExporter::export($columns, $rows, $errors, $filename, $fieldLabels);
     }
 
     /**
@@ -432,16 +454,51 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         $entityTitle = $entityTitles[$job['ENTITY_TYPE']] ?? $job['ENTITY_TYPE'];
         $filename = $job['ENTITY_TYPE'] . '_import_report_' . $jobId . '.xlsx';
 
-        StatsReportExporter::export($job, $entityTitle, $filename);
+        $jobOptions = !empty($job['IMPORT_OPTIONS']) ? (json_decode($job['IMPORT_OPTIONS'], true) ?? []) : [];
+        $jobColumns = $jobOptions['columns'] ?? [];
+
+        $fieldLabels = [];
+        if (!empty($job['ENTITY_TYPE'])) {
+            try {
+                $fieldLabels = $this->getFieldLabelMapping($job['ENTITY_TYPE'], $jobColumns);
+            } catch (\Throwable) {
+            }
+        }
+
+        StatsReportExporter::export($job, $entityTitle, $filename, $fieldLabels);
     }
 
 
     /**
-     * Проверяет права администратора
+     * Возвращает true если у текущего пользователя есть доступ к модулю
+     */
+    private function hasAccess(): bool
+    {
+        if (CurrentUser::get()->isAdmin()) {
+            return true;
+        }
+
+        $groupId = (int) \Bitrix\Main\Config\Option::get('rwb.massops', 'access_group_id', 0);
+        if ($groupId > 0) {
+            $userId = (int) CurrentUser::get()->getId();
+            $inGroup = \Bitrix\Main\UserGroupTable::getList([
+                'filter' => ['=USER_ID' => $userId, '=GROUP_ID' => $groupId],
+                'limit'  => 1,
+            ])->fetch();
+            if ($inGroup !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Проверяет права доступа к модулю, бросает исключение при отказе
      */
     private function checkAdmin(): void
     {
-        if (!CurrentUser::get()->isAdmin()) {
+        if (!$this->hasAccess()) {
             throw new AccessDeniedException();
         }
     }
@@ -536,6 +593,46 @@ class RwbMassopsMainComponent extends CBitrixComponent implements Controllerable
         }
 
         return $mapping;
+    }
+
+    /**
+     * Возвращает маппинг кодов полей CRM на названия колонок из загруженного файла
+     *
+     * Использует ту же логику, что ImportService::resolveFieldCodes():
+     * сопоставляет название колонки (name) с кодом поля через getFieldList().
+     * Результат: {fieldCode → 'Название столбца из XLSX'}.
+     *
+     * @param string $entityType Тип сущности
+     * @param array  $columns    Колонки [{id, name}]; если пусто — берёт из SessionStorage
+     */
+    private function getFieldLabelMapping(string $entityType, array $columns = []): array
+    {
+        if (empty($columns)) {
+            $columns = SessionStorage::getColumns();
+        }
+        if (empty($columns)) {
+            return [];
+        }
+
+        $repository = EntityRegistry::createRepository($entityType);
+        $titleToCode = array_flip($repository->getFieldList());
+
+        $labels = [];
+        foreach ($columns as $column) {
+            $colId = $column['id'] ?? '';
+            if ($colId === 'ROW_NUM' || $colId === '') {
+                continue;
+            }
+
+            $title = $column['name'] ?? '';
+            $code = $titleToCode[$title] ?? null;
+
+            if ($code !== null && $title !== '') {
+                $labels[$code] = $title;
+            }
+        }
+
+        return $labels;
     }
 
     /**

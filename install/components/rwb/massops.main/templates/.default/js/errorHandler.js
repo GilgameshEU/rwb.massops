@@ -36,9 +36,10 @@
          * @param {HTMLElement} container Контейнер
          * @param {boolean} isDryRun Флаг dry run
          */
-        showImportErrors: function (allErrors, errorsByRow, successCount, container, isDryRun, jobId) {
+        showImportErrors: function (allErrors, errorsByRow, successCount, container, isDryRun, jobId, fieldLabels) {
             var self = this;
             isDryRun = isDryRun || false;
+            fieldLabels = fieldLabels || {};
 
             this.removeBlock('rwb-import-errors');
 
@@ -77,7 +78,7 @@
 
             if (allErrors.length > 0) {
                 var grouped = this.buildGroupedErrors(allErrors);
-                var groupedHtml = this.buildGroupedErrorsHtml(grouped);
+                var groupedHtml = this.buildGroupedErrorsHtml(grouped, fieldLabels);
                 block.appendChild(groupedHtml);
 
                 if (isDryRun) {
@@ -198,10 +199,13 @@
                         message: error.message || ''
                     });
                 } else {
-                    var key = code || error.message || 'UNKNOWN';
+                    var msg = error.message || '';
+                    var key = (code || 'UNKNOWN') + '|' + msg;
                     if (!validationErrors[key]) {
                         validationErrors[key] = {
-                            message: error.message || key,
+                            message: msg || code || 'UNKNOWN',
+                            field: error.field || null,
+                            context: error.context || {},
                             rows: []
                         };
                     }
@@ -224,9 +228,10 @@
          * @param {Object} grouped Результат buildGroupedErrors
          * @returns {DocumentFragment}
          */
-        buildGroupedErrorsHtml: function (grouped) {
+        buildGroupedErrorsHtml: function (grouped, fieldLabels) {
             var fragment = document.createDocumentFragment();
             var self = this;
+            fieldLabels = fieldLabels || {};
 
             var validationKeys = Object.keys(grouped.validation);
             if (validationKeys.length > 0) {
@@ -241,12 +246,34 @@
                 validationKeys.forEach(function (key) {
                     var item = grouped.validation[key];
                     var li = BX.create('li');
+
                     var rowsText = item.rows.length > 0
                         ? ' — строки: ' + item.rows.sort(function (a, b) {
                         return a - b;
                     }).join(', ')
                         : '';
-                    li.textContent = item.message + rowsText;
+
+                    var labelPrefix = '';
+                    if (item.field && fieldLabels[item.field]) {
+                        labelPrefix = '[' + fieldLabels[item.field] + '] ';
+                    }
+
+                    li.textContent = labelPrefix + item.message + rowsText;
+
+                    var ctx = item.context || {};
+                    if (ctx.iblockType === 'lists' && ctx.iblockId) {
+                        var link = BX.create('a', {
+                            props: {
+                                href: '/services/lists/' + ctx.iblockId + '/view/0/',
+                                target: '_blank',
+                                className: 'rwb-error-iblock-link'
+                            },
+                            text: 'Открыть список допустимых значений'
+                        });
+                        li.appendChild(document.createTextNode(' '));
+                        li.appendChild(link);
+                    }
+
                     valList.appendChild(li);
                 });
                 valSection.appendChild(valList);

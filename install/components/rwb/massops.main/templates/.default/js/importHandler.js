@@ -68,16 +68,17 @@
                 var wouldBeAdded = response.data.wouldBeAdded || 0;
                 var gridErrors = response.data.errors || {};
                 var successRows = response.data.wouldBeAddedDetails || {};
+                var fieldLabels = response.data.fieldLabels || {};
 
                 self.lastReadyCount = wouldBeAdded;
 
                 window.RwbImportErrorHandler.showImportErrors(
-                    allErrors, gridErrors, wouldBeAdded, container, true
+                    allErrors, gridErrors, wouldBeAdded, container, true, null, fieldLabels
                 );
 
                 if (window.RwbGridHighlighter) {
-                    window.RwbGridHighlighter.highlight(gridErrors, successRows);
-                    window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
+                    window.RwbGridHighlighter.highlight(gridErrors, successRows, fieldLabels);
+                    window.RwbGridHighlighter.setupObserver(gridErrors, successRows, fieldLabels);
                 }
 
                 self._showPostCheckState(wouldBeAdded);
@@ -110,6 +111,7 @@
 
                     var allErrors = self._collectErrors(result.errors);
                     var gridErrors = result.errors || {};
+                    var fieldLabels = result.fieldLabels || {};
 
                     if (result.status === 'error' && result.errorMessage) {
                         allErrors.push({
@@ -120,7 +122,7 @@
                     }
 
                     window.RwbImportErrorHandler.showImportErrors(
-                        allErrors, gridErrors, result.successCount || 0, container, false, result.jobId
+                        allErrors, gridErrors, result.successCount || 0, container, false, result.jobId, fieldLabels
                     );
 
                     var successRows = self._buildSuccessRows(
@@ -128,8 +130,8 @@
                     );
 
                     if (window.RwbGridHighlighter) {
-                        window.RwbGridHighlighter.highlight(gridErrors, successRows);
-                        window.RwbGridHighlighter.setupObserver(gridErrors, successRows);
+                        window.RwbGridHighlighter.highlight(gridErrors, successRows, fieldLabels);
+                        window.RwbGridHighlighter.setupObserver(gridErrors, successRows, fieldLabels);
                     }
 
                     self._showCompleteState(result);

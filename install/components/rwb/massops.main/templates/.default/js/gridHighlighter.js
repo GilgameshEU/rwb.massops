@@ -13,6 +13,7 @@
         _observerTimeout: null,
         _lastErrorsByRow: null,
         _lastSuccessRows: null,
+        _lastFieldLabels: null,
 
         /**
          * Подсвечивает строки грида по результатам импорта/dry-run
@@ -20,10 +21,11 @@
          * @param {Object} errorsByRow Ошибки по индексу строки {0: [{message, ...}], ...}
          * @param {Object} successRows Успешные строки (ключи — индексы строк)
          */
-        highlight: function (errorsByRow, successRows) {
+        highlight: function (errorsByRow, successRows, fieldLabels) {
             this.clearHighlights();
 
             var self = this;
+            fieldLabels = fieldLabels || {};
 
             Object.keys(errorsByRow).forEach(function (rowIdx) {
                 var rowEl = self.getRowElement(rowIdx);
@@ -39,7 +41,8 @@
                 }
 
                 var messages = rowErrors.map(function (e) {
-                    return e.message || String(e);
+                    var prefix = e.field && fieldLabels[e.field] ? '[' + fieldLabels[e.field] + '] ' : '';
+                    return prefix + (e.message || String(e));
                 });
 
                 var hasDuplicateError = rowErrors.some(function (e) {
@@ -96,11 +99,12 @@
          * @param {Object} errorsByRow
          * @param {Object} successRows
          */
-        setupObserver: function (errorsByRow, successRows) {
+        setupObserver: function (errorsByRow, successRows, fieldLabels) {
             this.destroyObserver();
 
             this._lastErrorsByRow = errorsByRow;
             this._lastSuccessRows = successRows;
+            this._lastFieldLabels = fieldLabels || {};
 
             var gridContainer = BX('rwb-grid-container');
             if (!gridContainer) {
@@ -113,7 +117,8 @@
                 self._observerTimeout = setTimeout(function () {
                     self.highlight(
                         self._lastErrorsByRow,
-                        self._lastSuccessRows
+                        self._lastSuccessRows,
+                        self._lastFieldLabels
                     );
                 }, 150);
             });
