@@ -2,6 +2,7 @@
 
 namespace Rwb\Massops\Service;
 
+use Bitrix\Iblock\IblockTable;
 use Bitrix\Main\Loader;
 
 /**
@@ -191,8 +192,11 @@ class IblockResolver
             return $this->iblockTypeCache[$iblockId] = '';
         }
 
-        $rsIblock = \CIBlock::getList([], ['=ID' => $iblockId], false, ['nTopCount' => 1], ['IBLOCK_TYPE_ID']);
-        $iblock = $rsIblock->fetch();
+        $iblock = IblockTable::getList([
+            'filter' => ['=ID' => $iblockId],
+            'select' => ['IBLOCK_TYPE_ID'],
+            'limit'  => 1,
+        ])->fetch();
 
         return $this->iblockTypeCache[$iblockId] = (string) ($iblock['IBLOCK_TYPE_ID'] ?? '');
     }
