@@ -69,6 +69,13 @@ $tabs = [
                 ',',
                 ['text', 3],
             ],
+            Loc::getMessage('RWB_MASSOPS_OPT_SECTION_CLEANUP'),
+            [
+                'cleanup_days',
+                Loc::getMessage('RWB_MASSOPS_OPT_CLEANUP_DAYS'),
+                '30',
+                ['text', 6],
+            ],
             Loc::getMessage('RWB_MASSOPS_OPT_SECTION_ACCESS'),
             [
                 'access_group_id',
@@ -121,11 +128,32 @@ if (
     }
 }
 
+// Проверяем, существует ли настроенная группа доступа
+$configuredGroupId = (int) Option::get($moduleId, 'access_group_id', 0);
+$accessGroupMissing = false;
+if ($configuredGroupId > 0) {
+    $groupCheck = \CGroup::getById($configuredGroupId)->fetch();
+    if (!$groupCheck) {
+        $accessGroupMissing = true;
+    }
+}
+
 // Рендер вкладок
 $tabControl = new CAdminTabControl('tabControl', $tabs);
 
 $tabControl->begin();
 ?>
+<?php if ($accessGroupMissing): ?>
+<tr>
+    <td colspan="2">
+        <div class="adm-info-message-wrap adm-info-message-orange" style="margin:4px 0">
+            <div class="adm-info-message">
+                <?= Loc::getMessage('RWB_MASSOPS_OPT_GROUP_MISSING', ['#ID#' => $configuredGroupId]) ?>
+            </div>
+        </div>
+    </td>
+</tr>
+<?php endif; ?>
 <form method="post" action="<?= $APPLICATION->getCurPage() ?>?mid=<?= htmlspecialcharsbx($moduleId) ?>&lang=<?= LANGUAGE_ID ?>">
     <?= bitrix_sessid_post() ?>
     <?php

@@ -4,6 +4,7 @@ namespace Rwb\Massops\Support;
 
 use Bitrix\Main\Application;
 use Bitrix\Main\UserTable;
+use Rwb\Massops\Queue\ImportJobRowTable;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -23,7 +24,7 @@ class StatsReportExporter
     /**
      * Создаёт и отдаёт XLSX-файл с результатами импорта
      *
-     * @param array  $job         Данные задачи из ImportJobTable (включая IMPORT_DATA, IMPORT_OPTIONS)
+     * @param array  $job         Данные задачи из ImportJobTable (включая IMPORT_OPTIONS)
      * @param string $entityTitle Название типа сущности
      * @param string $filename    Имя файла для скачивания
      */
@@ -98,7 +99,7 @@ class StatsReportExporter
      */
     private static function fillResultsSheet(Worksheet $sheet, array $job, array $columns, array $fieldLabels = []): void
     {
-        $allRows = !empty($job['IMPORT_DATA']) ? (json_decode($job['IMPORT_DATA'], true) ?? []) : [];
+        $allRows = self::fetchJobRows((int) $job['ID']);
         $createdIds = !empty($job['CREATED_IDS']) ? (json_decode($job['CREATED_IDS'], true) ?? []) : [];
         $errors = !empty($job['ERRORS_DATA']) ? (json_decode($job['ERRORS_DATA'], true) ?? []) : [];
 
@@ -210,6 +211,28 @@ class StatsReportExporter
             $colLetter = Coordinate::stringFromColumnIndex($colIndex);
             $sheet->getColumnDimension($colLetter)->setAutoSize(true);
         }
+    }
+
+    /**
+     * Загружает строки задачи из таблицы строк
+     *
+     * @return array<int, mixed> [rowIndex => rowData]
+     */
+    private static function fetchJobRows(int $jobId): array
+    {
+        $rows = [];
+
+        $result = ImportJobRowTable::getList([
+            'filter' => ['=JOB_ID' => $jobId],
+            'select' => ['ROW_INDEX', 'ROW_DATA'],
+            'order'  => ['ROW_INDEX' => 'ASC'],
+        ]);
+
+        while ($row = $result->fetch()) {
+            $rows[(int) $row['ROW_INDEX']] = json_decode($row['ROW_DATA'], true);
+        }
+
+        return $rows;
     }
 
     /**

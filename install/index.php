@@ -20,7 +20,9 @@ use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\ModuleManager;
 use Bitrix\Main\SystemException;
 use Rwb\Massops\Menu\MenuInstaller;
+use Rwb\Massops\Queue\CleanupAgent;
 use Rwb\Massops\Queue\ImportAgent;
+use Rwb\Massops\Queue\ImportJobRowTable;
 use Rwb\Massops\Queue\ImportJobTable;
 
 class rwb_massops extends CModule
@@ -180,8 +182,37 @@ class rwb_massops extends CModule
             foreach ($this->getOrmList() as $ormClass) {
                 $this->createTable($ormClass);
             }
+            $this->createIndexes();
         } catch (Exception $exception) {
             $APPLICATION->throwException($exception->getMessage());
+        }
+    }
+
+    /**
+     * Создаёт индексы для таблиц очереди
+     *
+     * Индекс на STATUS ускоряет выборку агентом активных задач.
+     * Составной индекс на (JOB_ID, ROW_INDEX) ускоряет постраничную выборку строк.
+     */
+    private function createIndexes(): void
+    {
+        $connection = Application::getConnection();
+        $helper     = $connection->getSqlHelper();
+
+        $queueTable = $helper->quote(ImportJobTable::getTableName());
+        $rowsTable  = $helper->quote(ImportJobRowTable::getTableName());
+
+        $indexes = [
+            "CREATE INDEX idx_status ON {$queueTable} ({$helper->quote('STATUS')})",
+            "CREATE INDEX idx_job_row ON {$rowsTable} ({$helper->quote('JOB_ID')}, {$helper->quote('ROW_INDEX')})",
+        ];
+
+        foreach ($indexes as $sql) {
+            try {
+                $connection->queryExecute($sql);
+            } catch (\Throwable) {
+                // Индекс уже существует — пропускаем
+            }
         }
     }
 
@@ -390,11 +421,12 @@ class rwb_massops extends CModule
     {
         return [
             ImportJobTable::class,
+            ImportJobRowTable::class,
         ];
     }
 
     /**
-     * Регистрирует агент обработки очереди импорта
+     * Регистрирует агенты модуля
      */
     private function installAgent(): void
     {
@@ -408,15 +440,31 @@ class rwb_massops extends CModule
             '',
             100
         );
+
+        \CAgent::AddAgent(
+            CleanupAgent::getAgentName(),
+            $this->MODULE_ID,
+            'N',
+            86400,
+            '',
+            'Y',
+            '',
+            100
+        );
     }
 
     /**
-     * Удаляет агент обработки очереди импорта
+     * Удаляет агенты модуля
      */
     private function unInstallAgent(): void
     {
         \CAgent::RemoveAgent(
             ImportAgent::getAgentName(),
+            $this->MODULE_ID
+        );
+
+        \CAgent::RemoveAgent(
+            CleanupAgent::getAgentName(),
             $this->MODULE_ID
         );
     }

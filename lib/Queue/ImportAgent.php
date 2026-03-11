@@ -37,11 +37,22 @@ class ImportAgent
                 ],
                 'order' => ['ID' => 'ASC'],
                 'limit' => 1,
-                'select' => ['ID'],
+                'select' => ['ID', 'STATUS'],
             ])->fetch();
 
             if (!$job) {
                 return self::getAgentName();
+            }
+
+            // Если задача ещё в Pending — атомарно переводим её в Processing.
+            // UPDATE WHERE STATUS='pending' выполняется атомарно на уровне MySQL:
+            // если два агента стартуют одновременно, только один из них получит
+            // affectedRows > 0 и продолжит работу.
+            if ($job['STATUS'] === ImportJobStatus::Pending->value) {
+                if (!self::tryClaimJob((int) $job['ID'])) {
+                    // Другой агент уже захватил эту задачу — пропускаем тик
+                    return self::getAgentName();
+                }
             }
 
             self::log('START processBatch job=' . $job['ID']);
@@ -69,6 +80,32 @@ class ImportAgent
         }
 
         return self::getAgentName();
+    }
+
+    /**
+     * Атомарно переводит задачу из Pending в Processing
+     *
+     * Использует UPDATE WHERE STATUS='pending' — MySQL выполняет это атомарно
+     * на уровне row-lock. Если другой агент уже захватил задачу, affectedRows = 0.
+     *
+     * @return bool true если захват успешен, false если задачу уже взял другой агент
+     */
+    private static function tryClaimJob(int $jobId): bool
+    {
+        $connection = Application::getConnection();
+        $helper    = $connection->getSqlHelper();
+        $tableName = $helper->quote(ImportJobTable::getTableName());
+
+        $connection->queryExecute(sprintf(
+            "UPDATE %s SET %s = '%s', %s = NOW() WHERE %s = %d AND %s = '%s'",
+            $tableName,
+            $helper->quote('STATUS'), ImportJobStatus::Processing->value,
+            $helper->quote('STARTED_AT'),
+            $helper->quote('ID'), $jobId,
+            $helper->quote('STATUS'), ImportJobStatus::Pending->value
+        ));
+
+        return $connection->getAffectedRowsCount() > 0;
     }
 
     /**

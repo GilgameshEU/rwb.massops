@@ -12,8 +12,12 @@ $MESS['RWB_MASSOPS_OPT_SECTION_PHONE'] = 'Телефоны';
 $MESS['RWB_MASSOPS_OPT_PHONE_COUNTRY'] = 'Код страны по умолчанию (ISO 3166-1 alpha-2)';
 $MESS['RWB_MASSOPS_OPT_DELIMITER'] = 'Разделитель мультиполей (PHONE, EMAIL)';
 
+$MESS['RWB_MASSOPS_OPT_SECTION_CLEANUP'] = 'Очистка данных';
+$MESS['RWB_MASSOPS_OPT_CLEANUP_DAYS'] = 'Хранить историю задач (дней)';
+
 $MESS['RWB_MASSOPS_OPT_SECTION_ACCESS'] = 'Права доступа';
 $MESS['RWB_MASSOPS_OPT_ACCESS_GROUP'] = 'Группа пользователей с доступом к модулю';
 $MESS['RWB_MASSOPS_OPT_ACCESS_GROUP_NONE'] = '— только администраторы —';
+$MESS['RWB_MASSOPS_OPT_GROUP_MISSING'] = 'Внимание: группа с ID=#ID# не найдена. Доступ к модулю предоставляется только администраторам.';
 
 $MESS['RWB_MASSOPS_OPT_SAVE'] = 'Сохранить';

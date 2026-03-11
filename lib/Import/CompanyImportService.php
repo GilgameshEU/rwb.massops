@@ -68,13 +68,20 @@ class CompanyImportService extends ImportService
             return $errors;
         }
 
+        // Находим индекс колонки ИНН в массиве fieldCodes, чтобы читать
+        // значение напрямую из сырых данных строки без полной нормализации.
+        // RowNormalizer для строковых UF-полей делает только trim() —
+        // этого достаточно для проверки дублей.
+        $innIndex = array_search($innFieldCode, $fieldCodes, true);
+        if ($innIndex === false) {
+            return $errors;
+        }
+
         $preparedRows = [];
         foreach ($rows as $rowIndex => $row) {
-            $normalized = $this->normalizer->normalize(
-                array_values($row['data']),
-                $fieldCodes
-            );
-            $preparedRows[$rowIndex] = ['uf' => $normalized->uf];
+            $rawData = array_values($row['data']);
+            $innValue = trim((string) ($rawData[$innIndex] ?? ''));
+            $preparedRows[$rowIndex] = ['uf' => [$innFieldCode => $innValue]];
         }
 
         return array_replace($errors, $this->duplicateChecker->checkFileInternalDuplicates($preparedRows, $innFieldCode));

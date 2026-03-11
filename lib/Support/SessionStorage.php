@@ -85,10 +85,12 @@ class SessionStorage
 
     /**
      * Получает колонки из сессии
+     *
+     * Использует get() для соблюдения TTL-проверки.
      */
     public static function getColumns(): array
     {
-        return $_SESSION[self::SESSION_KEY]['COLUMNS'] ?? [];
+        return self::get()['COLUMNS'] ?? [];
     }
 
     /**

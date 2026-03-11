@@ -26,7 +26,12 @@ class XlsxParser implements ParserInterface
      */
     public function parse(string $path): array
     {
-        $spreadsheet = IOFactory::load($path);
+        // setReadDataOnly(true) пропускает загрузку форматирования, стилей,
+        // диаграмм и другой метаинформации. Для файла 10 МБ это снижает
+        // потребление памяти в несколько раз — читаются только значения ячеек.
+        $reader = IOFactory::createReader('Xlsx');
+        $reader->setReadDataOnly(true);
+        $spreadsheet = $reader->load($path);
 
         $sheet = $spreadsheet->getSheetByName(self::IMPORT_SHEET_NAME);
 

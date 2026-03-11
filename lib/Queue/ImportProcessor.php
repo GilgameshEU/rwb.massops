@@ -2,6 +2,7 @@
 
 namespace Rwb\Massops\Queue;
 
+use Bitrix\Main\Application;
 use Bitrix\Main\Config\Option;
 use Bitrix\Main\Loader;
 use Bitrix\Main\Type\DateTime;
@@ -15,6 +16,8 @@ use RuntimeException;
  * Обработчик задач импорта
  *
  * Обрабатывает строки пачками (BATCH_SIZE), обновляя прогресс в БД.
+ * Строки хранятся в отдельной таблице b_rwb_massops_import_rows,
+ * что позволяет загружать в память только нужную пачку, а не весь файл.
  */
 class ImportProcessor
 {
@@ -61,32 +64,12 @@ class ImportProcessor
             return false;
         }
 
-        if ($status === ImportJobStatus::Pending->value) {
-            ImportJobTable::update($jobId, [
-                'STATUS' => ImportJobStatus::Processing->value,
-                'STARTED_AT' => new DateTime(),
-            ]);
-        }
-
         try {
-            $dataSize = strlen($job['IMPORT_DATA'] ?? '');
-            $this->log("job={$jobId} Decoding IMPORT_DATA, size={$dataSize} bytes");
-
-            $allRows = json_decode($job['IMPORT_DATA'], true);
-
-            if (!is_array($allRows)) {
-                throw new RuntimeException(
-                    'Не удалось декодировать данные импорта (IMPORT_DATA). '
-                    . 'Размер поля: ' . $dataSize . ' байт'
-                );
-            }
-
             $entityType = $job['ENTITY_TYPE'];
             $startIndex = (int) $job['PROCESSED_ROWS'];
             $totalRows = (int) $job['TOTAL_ROWS'];
             $batchSize = $this->getBatchSize();
 
-            // Декодируем все JSON-поля один раз — исключаем повторную десериализацию
             $options = !empty($job['IMPORT_OPTIONS'])
                 ? (json_decode($job['IMPORT_OPTIONS'], true) ?? [])
                 : [];
@@ -101,15 +84,11 @@ class ImportProcessor
 
             $endIndex = min($startIndex + $batchSize, $totalRows);
 
-            $this->log("job={$jobId} Decoded OK, entityType={$entityType}, totalRows={$totalRows}, batch={$startIndex}..{$endIndex}");
+            $this->log("job={$jobId} Fetching rows {$startIndex}..{$endIndex} of {$totalRows}, entityType={$entityType}");
 
-            $allRowsIndexed = array_values($allRows);
-            $batchRows = [];
-            for ($i = $startIndex; $i < $endIndex; $i++) {
-                $batchRows[$i] = $allRowsIndexed[$i];
-            }
-
+            $batchRows = $this->fetchBatchRows($jobId, $startIndex, $endIndex);
             $batchCount = count($batchRows);
+
             $this->log("job={$jobId} Calling importService->import(), batchSize={$batchCount}");
 
             $importService = EntityRegistry::createImportService($entityType);
@@ -202,6 +181,7 @@ class ImportProcessor
                         'FINISHED_AT' => new DateTime(),
                         'ERRORS_DATA' => json_encode($errorsData),
                     ]);
+                    $this->deleteJobRows($jobId);
                     $this->log("job={$jobId} All retries exhausted ({$maxRetries}), marked as Error");
                 }
             } catch (\Throwable $updateEx) {
@@ -210,6 +190,55 @@ class ImportProcessor
 
             throw $e;
         }
+    }
+
+    /**
+     * Выбирает пачку строк из таблицы строк по диапазону индексов
+     *
+     * В память загружается только нужный диапазон, а не весь набор данных.
+     *
+     * @param int $jobId      ID задачи
+     * @param int $startIndex Начальный индекс (включительно)
+     * @param int $endIndex   Конечный индекс (исключительно)
+     *
+     * @return array<int, mixed> [rowIndex => rowData]
+     */
+    private function fetchBatchRows(int $jobId, int $startIndex, int $endIndex): array
+    {
+        $rows = [];
+
+        $result = ImportJobRowTable::getList([
+            'filter' => [
+                '=JOB_ID'    => $jobId,
+                '>=ROW_INDEX' => $startIndex,
+                '<ROW_INDEX'  => $endIndex,
+            ],
+            'select' => ['ROW_INDEX', 'ROW_DATA'],
+            'order'  => ['ROW_INDEX' => 'ASC'],
+        ]);
+
+        while ($row = $result->fetch()) {
+            $rows[(int) $row['ROW_INDEX']] = json_decode($row['ROW_DATA'], true);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Удаляет строки задачи из таблицы строк после завершения (Completed или Error)
+     *
+     * Освобождает место в БД — данные строк больше не нужны.
+     */
+    private function deleteJobRows(int $jobId): void
+    {
+        $connection = Application::getConnection();
+        $helper    = $connection->getSqlHelper();
+        $connection->queryExecute(sprintf(
+            "DELETE FROM %s WHERE %s = %d",
+            $helper->quote(ImportJobRowTable::getTableName()),
+            $helper->quote('JOB_ID'),
+            $jobId
+        ));
     }
 
     /**

@@ -55,10 +55,6 @@ class ImportJobTable extends Entity\DataManager
             new Entity\TextField('CREATED_IDS', [
                 'nullable' => true,
             ]),
-            new Entity\TextField('IMPORT_DATA', [
-                'required' => true,
-                'long' => true,
-            ]),
             new Entity\TextField('IMPORT_OPTIONS', [
                 'nullable' => true,
             ]),

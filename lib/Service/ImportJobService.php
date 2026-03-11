@@ -3,10 +3,12 @@
 namespace Rwb\Massops\Service;
 
 use Bitrix\Main\AccessDeniedException;
+use Bitrix\Main\Application;
 use Bitrix\Main\Entity\ExpressionField;
 use Bitrix\Main\Type\DateTime;
 use Bitrix\Main\UserTable;
 use Rwb\Massops\EntityRegistry;
+use Rwb\Massops\Queue\ImportJobRowTable;
 use Rwb\Massops\Queue\ImportJobStatus;
 use Rwb\Massops\Queue\ImportJobTable;
 
@@ -33,22 +35,80 @@ class ImportJobService
      */
     public function createJob(int $userId, string $entityType, array $rows, array $options): int
     {
-        $result = ImportJobTable::add([
-            'USER_ID' => $userId,
-            'ENTITY_TYPE' => $entityType,
-            'STATUS' => ImportJobStatus::Pending->value,
-            'TOTAL_ROWS' => count($rows),
-            'ERRORS_DATA' => json_encode([]),
-            'CREATED_IDS' => json_encode([]),
-            'IMPORT_DATA' => json_encode($rows),
-            'IMPORT_OPTIONS' => json_encode($options),
-        ]);
+        $connection = Application::getConnection();
+        $connection->startTransaction();
 
-        if (!$result->isSuccess()) {
-            throw new \RuntimeException('Не удалось создать задачу импорта');
+        try {
+            $result = ImportJobTable::add([
+                'USER_ID' => $userId,
+                'ENTITY_TYPE' => $entityType,
+                'STATUS' => ImportJobStatus::Pending->value,
+                'TOTAL_ROWS' => count($rows),
+                'ERRORS_DATA' => json_encode([]),
+                'CREATED_IDS' => json_encode([]),
+                'IMPORT_OPTIONS' => json_encode($options),
+            ]);
+
+            if (!$result->isSuccess()) {
+                throw new \RuntimeException('Не удалось создать задачу импорта');
+            }
+
+            $jobId = $result->getId();
+            $this->bulkInsertRows($jobId, $rows);
+
+            $connection->commitTransaction();
+
+            return $jobId;
+        } catch (\Throwable $e) {
+            $connection->rollbackTransaction();
+            throw $e;
+        }
+    }
+
+    /**
+     * Пакетная вставка строк в таблицу b_rwb_massops_import_rows
+     *
+     * Вставляет по 500 строк за запрос, чтобы не превышать лимит
+     * на размер одного INSERT.
+     *
+     * @param int   $jobId ID задачи
+     * @param array $rows  Строки данных [rowIndex => rowData]
+     */
+    private function bulkInsertRows(int $jobId, array $rows): void
+    {
+        if (empty($rows)) {
+            return;
         }
 
-        return $result->getId();
+        $connection = Application::getConnection();
+        $helper = $connection->getSqlHelper();
+        $tableName = ImportJobRowTable::getTableName();
+
+        $qt       = $helper->quote($tableName);
+        $qJobId   = $helper->quote('JOB_ID');
+        $qRowIdx  = $helper->quote('ROW_INDEX');
+        $qRowData = $helper->quote('ROW_DATA');
+        $prefix   = "INSERT INTO {$qt} ({$qJobId}, {$qRowIdx}, {$qRowData}) VALUES ";
+
+        $chunk = [];
+
+        foreach ($rows as $rowIndex => $rowData) {
+            $chunk[] = sprintf(
+                "(%d, %d, '%s')",
+                $jobId,
+                (int) $rowIndex,
+                $helper->forSql(json_encode($rowData))
+            );
+
+            if (count($chunk) === 500) {
+                $connection->queryExecute($prefix . implode(',', $chunk));
+                $chunk = [];
+            }
+        }
+
+        if (!empty($chunk)) {
+            $connection->queryExecute($prefix . implode(',', $chunk));
+        }
     }
 
     /**
